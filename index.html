@@ -270,8 +270,8 @@
 
         // PeerJS Network Globals
         let peer = null;
-        let hostConnection = null; // Used by Player to talk to Host
-        let clientConnections = []; // Used by Host to talk to all Players
+        let hostConnection = null; 
+        let clientConnections = []; 
 
         let scene, camera, renderer, trackCurve;
         let trackCurvePoints = []; 
@@ -301,7 +301,6 @@
         // 2. NETWORK INIT (PEER JS)
         // ==========================================
         const initNetwork = () => {
-            // Replaces Firebase entirely. UI is unlocked instantly.
             document.getElementById('loading-msg').style.display = 'none';
             document.getElementById('action-buttons').classList.remove('hidden');
             checkUrlForGame();
@@ -343,7 +342,7 @@
             else if (orientation === -90) tilt = -e.beta;
             else tilt = e.gamma;
             
-            if (Math.abs(tilt) < 3) tilt = 0; // Deadzone
+            if (Math.abs(tilt) < 3) tilt = 0; 
             gyroSteer = Math.max(-1, Math.min(1, tilt / 30));
         };
 
@@ -363,7 +362,6 @@
             state.gameId = code;
             state.role = 'host';
             
-            // Create Host Peer
             peer = new Peer('edukart-' + code);
             
             peer.on('open', (id) => {
@@ -379,6 +377,11 @@
                         updateLobbyListUI();
                     } else if (data.type === 'update' && state.players[data.id]) {
                         Object.assign(state.players[data.id], data.data);
+                        
+                        // FIX: Ensure host updates visual meshes when receiving coordinates
+                        if (state.gameState === 'playing' || state.gameState === 'countdown') {
+                            updateRemotePlayerMesh(data.id, state.players[data.id]);
+                        }
                     }
                 });
                 
@@ -417,7 +420,7 @@
             const statusEl = document.getElementById('connection-status');
             statusEl.classList.remove('hidden');
 
-            peer = new Peer(); // Random ID for player
+            peer = new Peer(); 
             peer.on('open', () => {
                 hostConnection = peer.connect('edukart-' + code);
                 
@@ -428,19 +431,17 @@
 
                 hostConnection.on('data', (data) => {
                     if (data.type === 'sync') {
-                        // Handle Game State Changes
                         if (data.gameState === 'countdown' && state.gameState === 'menu') {
                             initStartSequence();
                         }
                         state.gameState = data.gameState;
                         
-                        // Sync remote players
                         for (let id in data.players) {
                             if (!state.players[id] && state.gameState === 'menu') {
                                 state.players[id] = data.players[id];
-                                updateLobbyListUI(); // New player joined
+                                updateLobbyListUI(); 
                             } else {
-                                state.players[id] = data.players[id]; // Update existing
+                                state.players[id] = data.players[id]; 
                             }
                         }
 
@@ -474,8 +475,8 @@
                 document.getElementById('waiting-host-msg').style.display = 'none';
                 
                 document.getElementById('btn-start').addEventListener('click', () => {
-                    state.gameState = 'countdown'; // This will broadcast to peers in the sync loop
-                    initStartSequence(); // Host also starts rendering
+                    state.gameState = 'countdown'; 
+                    initStartSequence(); 
                 });
             }
         };
@@ -498,18 +499,16 @@
             if (state.gameMode === 'single') return;
 
             if (state.role === 'host') {
-                // Host broadcasts global state and all players to everyone
                 const syncPayload = { type: 'sync', gameState: state.gameState, players: state.players };
                 clientConnections.forEach(conn => {
                     if (conn.open) conn.send(syncPayload);
                 });
             } else if (state.role === 'player' && hostConnection && hostConnection.open) {
-                // Player sends their state to the Host
                 hostConnection.send({
                     type: 'update',
                     id: state.sessionId,
                     data: {
-                        name: state.userName, // Backup incase host missed join
+                        name: state.userName, 
                         carColor: state.carColor,
                         x: physics.x, y: physics.y, z: physics.z, rotation: physics.rotation,
                         lap: state.myLap, progress: state.myProgress
@@ -549,7 +548,6 @@
                     localVehicleMesh.rotation.y = physics.rotation;
                 }
 
-                // Initialize self in state for local rendering
                 state.players[state.sessionId] = {
                     name: state.userName, carColor: state.carColor, progress: 0, lap: 1
                 };
@@ -561,7 +559,6 @@
 
             animate(); 
 
-            // Host doesn't need to see the countdown overlay, just the split screen
             if (state.role === 'player' || state.gameMode === 'single') {
                 const overlay = document.getElementById('countdown-overlay');
                 const lRed = document.getElementById('light-red');
@@ -581,7 +578,7 @@
                 setTimeout(() => {
                     overlay.style.display = 'none';
                     
-                    state.gameState = 'playing'; // Unlock physics
+                    state.gameState = 'playing'; 
                     raceStartTime = Date.now();
                     document.getElementById('hud').classList.remove('hidden');
                     document.getElementById('global-timer').classList.remove('hidden');
@@ -594,7 +591,6 @@
                     }
                 }, 4000);
             } else if (state.role === 'host') {
-                // Host just sets state automatically after 4 seconds
                 setTimeout(() => {
                     state.gameState = 'playing';
                     raceStartTime = Date.now();
@@ -887,6 +883,7 @@
         };
 
         const updateRemotePlayerMesh = (id, data) => {
+            if (data.x === undefined) return; // Prevent NaN crash before player loads in
             if (!remoteVehicleMeshes[id]) {
                 const mesh = createMonsterTruck(data.carColor);
                 mesh.position.set(data.x, data.y, data.z); 
@@ -961,7 +958,7 @@
             if (state.gameMode === 'single') {
                 updateBots();
             } else if (state.gameMode === 'multi' && now - lastSyncTime > SYNC_RATE) {
-                syncNetworkState(); // Replaced individual sync function
+                syncNetworkState(); 
                 lastSyncTime = now;
             }
 
@@ -1046,7 +1043,14 @@
         const renderHostView = () => {
             const w = window.innerWidth / 3.5; 
             const h = window.innerHeight / 3.5;
+            
+            // Clear entire screen to black before drawing split viewports
+            renderer.setViewport(0, 0, w, h);
+            renderer.setScissor(0, 0, w, h);
             renderer.setScissorTest(true);
+            renderer.setClearColor(0x000000, 1);
+            renderer.clear();
+            renderer.setClearColor(0x6CB4EE, 1); // Reset sky color
 
             const pIds = Object.keys(state.players);
             const activeIds = pIds.slice(0, 4);
@@ -1060,9 +1064,12 @@
 
             if (activeIds.length > 0) {
                 activeIds.forEach((id, index) => {
+                    const data = state.players[id];
+                    if (data.x === undefined) return;
+
                     const mesh = remoteVehicleMeshes[id];
                     if(!mesh) {
-                        updateRemotePlayerMesh(id, state.players[id]);
+                        updateRemotePlayerMesh(id, data);
                         return;
                     }
 
@@ -1110,7 +1117,7 @@
             };
 
             for(let id in remoteVehicleMeshes) {
-                if (id === state.sessionId) continue; // Don't label yourself in Player view
+                if (id === state.sessionId) continue; 
                 const mesh = remoteVehicleMeshes[id];
                 const pData = state.players[id]; 
                 if(pData) addLabel(mesh, pData.name, pData.carColor);
