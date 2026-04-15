@@ -320,30 +320,54 @@
             });
         });
 
+        // ----------------------------------------------------
+        // IMPROVED DEVICE MOTION FOR TILT TO STEER (NO GIMBAL LOCK)
+        // ----------------------------------------------------
         const requestGyroPermission = async () => {
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
                 try {
-                    const permission = await DeviceOrientationEvent.requestPermission();
+                    const permission = await DeviceMotionEvent.requestPermission();
                     if (permission === 'granted') {
-                        window.addEventListener('deviceorientation', handleOrientation);
+                        window.addEventListener('devicemotion', handleMotion);
+                    } else {
+                        console.warn("Gyro permission denied.");
                     }
-                } catch(e) { console.log("Gyro permission error"); }
+                } catch(e) { console.error("Gyro permission error:", e); }
             } else {
-                window.addEventListener('deviceorientation', handleOrientation);
+                window.addEventListener('devicemotion', handleMotion);
             }
         };
 
-        const handleOrientation = (e) => {
-            if(state.role !== 'player' || e.gamma === null) return;
-            let tilt = 0;
+        const handleMotion = (e) => {
+            if(state.role !== 'player') return;
+            let accel = e.accelerationIncludingGravity;
+            if (!accel || accel.x === null) return;
+
+            // iOS and Android map the hardware axes backwards from each other. 
+            // This cleanly normalizes them so math works everywhere.
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            let ax = isIOS ? -accel.x : accel.x;
+            let ay = isIOS ? -accel.y : accel.y;
+
             let orientation = (window.screen && window.screen.orientation && window.screen.orientation.angle) || window.orientation || 0;
             
-            if (orientation === 90) tilt = e.beta;
-            else if (orientation === -90) tilt = -e.beta;
-            else tilt = e.gamma;
-            
-            if (Math.abs(tilt) < 3) tilt = 0; 
-            gyroSteer = Math.max(-1, Math.min(1, tilt / 30));
+            // Fallback for missing screen orientation
+            if (orientation === 0 && window.innerWidth > window.innerHeight) {
+                orientation = 90;
+            }
+
+            let tilt = 0;
+            // Map the physical gravity vector to left/right steering based on how the phone is rotated
+            if (orientation === 90) {
+                tilt = ay;
+            } else if (orientation === -90) {
+                tilt = -ay;
+            } else {
+                tilt = -ax;
+            }
+
+            if (Math.abs(tilt) < 1.0) tilt = 0; // Prevent micro-drift (Deadzone)
+            gyroSteer = Math.max(-1, Math.min(1, tilt / 5.0));
         };
 
         document.getElementById('btn-single').addEventListener('click', () => {
@@ -378,7 +402,6 @@
                     } else if (data.type === 'update' && state.players[data.id]) {
                         Object.assign(state.players[data.id], data.data);
                         
-                        // FIX: Ensure host updates visual meshes when receiving coordinates
                         if (state.gameState === 'playing' || state.gameState === 'countdown') {
                             updateRemotePlayerMesh(data.id, state.players[data.id]);
                         }
@@ -883,7 +906,7 @@
         };
 
         const updateRemotePlayerMesh = (id, data) => {
-            if (data.x === undefined) return; // Prevent NaN crash before player loads in
+            if (data.x === undefined) return; 
             if (!remoteVehicleMeshes[id]) {
                 const mesh = createMonsterTruck(data.carColor);
                 mesh.position.set(data.x, data.y, data.z); 
@@ -1043,14 +1066,7 @@
         const renderHostView = () => {
             const w = window.innerWidth / 3.5; 
             const h = window.innerHeight / 3.5;
-            
-            // Clear entire screen to black before drawing split viewports
-            renderer.setViewport(0, 0, w, h);
-            renderer.setScissor(0, 0, w, h);
             renderer.setScissorTest(true);
-            renderer.setClearColor(0x000000, 1);
-            renderer.clear();
-            renderer.setClearColor(0x6CB4EE, 1); // Reset sky color
 
             const pIds = Object.keys(state.players);
             const activeIds = pIds.slice(0, 4);
@@ -1064,12 +1080,9 @@
 
             if (activeIds.length > 0) {
                 activeIds.forEach((id, index) => {
-                    const data = state.players[id];
-                    if (data.x === undefined) return;
-
                     const mesh = remoteVehicleMeshes[id];
                     if(!mesh) {
-                        updateRemotePlayerMesh(id, data);
+                        updateRemotePlayerMesh(id, state.players[id]);
                         return;
                     }
 
