@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>EduKart Retro - Monster Truck Racing</title>
+    
+    <!-- Tailwind CSS for UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Three.js for 3D Graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- QRCode.js for lobby sharing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; color: white; font-family: 'Courier New', Courier, monospace; touch-action: none; }
+        
+        /* Pixelated Canvas Trick properly stretched */
+        #game-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: none; }
+        #game-canvas canvas { 
+            width: 100% !important; 
+            height: 100% !important; 
+            object-fit: cover;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-crisp-edges;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        
+        /* Celebration Canvas */
+        #confetti-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 40; pointer-events: none; display: none; }
+
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+        .pointer-events-auto { pointer-events: auto; }
+        
+        /* Retro Typography */
+        h1, h2, h3, .pixel-font { font-family: 'Press Start 2P', 'Courier New', cursive; }
+        
+        /* Retro UI Panels */
+        .retro-panel { background: #111155; border: 4px solid #ffffff; box-shadow: 8px 8px 0px #000000; color: white; text-transform: uppercase; }
+        .retro-btn { background: #cccccc; border: 4px solid #ffffff; border-bottom-color: #555; border-right-color: #555; color: black; font-weight: bold; text-transform: uppercase; cursor: pointer; transition: background 0.1s; }
+        .retro-btn:hover { background: #eeeeee; }
+        .retro-btn:active { border-color: #555; border-bottom-color: #fff; border-right-color: #fff; background: #999; transform: translate(2px, 2px); box-shadow: none; }
+        .retro-btn-blue { background: #3B82F6; color: white; }
+        .retro-btn-green { background: #22C55E; color: white; }
+        
+        /* Mobile Controls */
+        #mobile-controls { display: none; position: absolute; bottom: 30px; width: 100%; height: 100px; z-index: 20; pointer-events: none; }
+        .ctrl-btn { width: 70px; height: 70px; background: rgba(0,0,0,0.6); border: 4px solid #fff; color: white; font-weight: bold; font-size: 20px; display: flex; justify-content: center; align-items: center; pointer-events: auto; user-select: none; font-family: 'Press Start 2P'; border-radius: 50%; box-shadow: 4px 4px 0px rgba(0,0,0,0.8); }
+        .ctrl-btn:active { background: rgba(255,255,255,0.8); color: black; transform: translateY(4px); box-shadow: 0px 0px 0px rgba(0,0,0,0); }
+
+        .color-option { height: 50px; border: 4px solid #222; cursor: pointer; transition: all 0.1s; }
+        .color-option.selected { border-color: #ffffff; transform: scale(1.1); box-shadow: 0 0 10px rgba(255,255,255,0.8); }
+        
+        #trivia-modal, #penalty-overlay { display: none; }
+        #penalty-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(170,0,0,0.85); z-index: 100; align-items: center; justify-content: center; flex-direction: column; }
+        
+        #countdown-overlay { display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; flex-direction: column; }
+        .stoplight-box { background: #222; border: 6px solid #fff; padding: 20px; border-radius: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .light { width: 80px; height: 80px; border-radius: 50%; background: #111; border: 4px solid #444; }
+        .light.red { background: #ff0000; box-shadow: 0 0 30px #ff0000; }
+        .light.yellow { background: #ffff00; box-shadow: 0 0 30px #ffff00; }
+        .light.green { background: #00ff00; box-shadow: 0 0 30px #00ff00; }
+        #countdown-text { font-size: 48px; margin-top: 30px; text-shadow: 4px 4px 0px #000; color: white; }
+
+        @keyframes bounceWinner {
+            0%, 100% { transform: translateY(0) scale(1); color: #FACC15; }
+            50% { transform: translateY(-20px) scale(1.1); color: #fff; }
+        }
+        .winner-anim { animation: bounceWinner 0.8s infinite ease-in-out; }
+    </style>
+</head>
+<body>
+
+    <div id="game-canvas"></div>
+    <canvas id="confetti-canvas"></canvas>
+
+    <div id="ui-layer" class="flex items-center justify-center">
+        
+        <div id="global-timer" class="absolute top-4 w-full text-center text-4xl text-yellow-300 pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,1)] hidden z-50">00:00.0</div>
+
+        <!-- Main Menu -->
+        <div id="main-menu" class="retro-panel p-6 max-w-md w-full pointer-events-auto text-center mx-4">
+            <h1 class="text-3xl text-yellow-300 mb-2 pixel-font leading-relaxed drop-shadow-[4px_4px_0_rgba(0,0,0,1)]">EDUKART</h1>
+            <p class="text-[10px] text-gray-300 mb-6 pixel-font tracking-widest">MONSTER TRUCKS</p>
+            
+            <div class="mb-4 text-left">
+                <label class="block text-xs mb-2 pixel-font text-gray-300">RACER NAME</label>
+                <input type="text" id="player-name" class="w-full bg-black border-2 border-white px-3 py-3 text-white focus:outline-none pixel-font text-xs" placeholder="PLAYER1" maxlength="10">
+            </div>
+
+            <div class="mb-6 text-left">
+                <label class="block text-xs mb-2 pixel-font text-gray-300">TRUCK COLOR</label>
+                <div class="grid grid-cols-4 gap-3">
+                    <div class="color-option selected bg-red-500" data-color="#EF4444"></div>
+                    <div class="color-option bg-blue-500" data-color="#3B82F6"></div>
+                    <div class="color-option bg-green-500" data-color="#22C55E"></div>
+                    <div class="color-option bg-yellow-400" data-color="#FACC15"></div>
+                </div>
+            </div>
+
+            <div class="mb-4 bg-black/50 p-3 border border-white">
+                <p class="text-[10px] text-yellow-400 pixel-font leading-loose text-center">🏆 FIRST TO 3 LAPS WINS!</p>
+                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>WASD / ARROWS / TILT TO STEER<br>SPACEBAR TO JUMP!</p>
+            </div>
+
+            <div id="loading-msg" class="text-yellow-400 mb-4 pixel-font text-xs animate-pulse">CONNECTING TO SERVER...</div>
+
+            <div id="action-buttons" class="space-y-4 hidden mt-4">
+                
+                <div class="border-t-2 border-gray-600 pt-4 mb-2">
+                    <button id="btn-single" class="w-full retro-btn retro-btn-green py-3 px-4 text-xs pixel-font mb-4">PRACTICE (SOLO)</button>
+                </div>
+
+                <div class="border-t-2 border-gray-600 pt-4">
+                    <p class="text-[10px] text-gray-400 pixel-font mb-3">--- MULTIPLAYER ---</p>
+                    <div class="flex space-x-2 mb-3">
+                        <input type="text" id="join-code" class="w-1/2 bg-black border-2 border-white px-2 py-2 text-white focus:outline-none uppercase text-center font-bold tracking-wider pixel-font text-xs" placeholder="ROOM CODE">
+                        <button id="btn-join" class="w-1/2 retro-btn py-2 px-2 text-xs pixel-font">JOIN RACE</button>
+                    </div>
+                    <button id="btn-create" class="w-full retro-btn retro-btn-blue py-3 px-4 text-xs pixel-font text-[10px]">HOST DISPLAY (SPECTATOR)</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lobby -->
+        <div id="lobby-menu" class="retro-panel p-6 max-w-md w-full pointer-events-auto hidden text-center mx-4">
+            <h2 class="text-xl mb-4 text-green-400 pixel-font">RACE LOBBY</h2>
+            <div class="bg-black p-4 mb-2 border-2 border-white shadow-inner">
+                <p class="text-xs text-gray-400 mb-2 pixel-font">ROOM CODE</p>
+                <p class="text-4xl text-yellow-300 pixel-font tracking-widest drop-shadow-[2px_2px_0_rgba(255,255,255,0.3)]" id="display-room-code">----</p>
+            </div>
+            
+            <p class="text-[10px] text-yellow-400 pixel-font mb-4">🏆 FIRST TO 3 LAPS WINS</p>
+
+            <div id="qrcode-container" class="hidden">
+                <p class="text-[10px] text-gray-400 mb-2 pixel-font">SCAN TO JOIN</p>
+                <div id="qrcode" class="flex justify-center bg-white p-2 mb-4 w-32 h-32 mx-auto border-4 border-black"></div>
+            </div>
+            
+            <div class="text-left mb-6">
+                <h3 class="text-xs border-b-2 border-white pb-2 mb-2 text-white pixel-font">RACERS CONNECTED</h3>
+                <ul id="lobby-player-list" class="space-y-2 text-sm max-h-32 overflow-y-auto pixel-font bg-black p-3 border-2 border-gray-600">
+                    <!-- Populated by JS -->
+                </ul>
+            </div>
+
+            <button id="btn-start" class="w-full retro-btn retro-btn-green py-3 px-4 hidden text-xs pixel-font">START RACE NOW</button>
+            <p id="waiting-host-msg" class="text-yellow-400 text-[10px] pixel-font animate-pulse mt-2">WAITING FOR HOST TO START...</p>
+        </div>
+
+        <!-- Countdown Stop Light Overlay -->
+        <div id="countdown-overlay" class="pointer-events-auto">
+            <div class="stoplight-box">
+                <div class="light" id="light-red"></div>
+                <div class="light" id="light-yellow"></div>
+                <div class="light" id="light-green"></div>
+            </div>
+            <div id="countdown-text" class="pixel-font">ENGINES ON...</div>
+        </div>
+
+        <!-- Trivia Modal -->
+        <div id="trivia-modal" class="retro-panel p-6 max-w-md w-full pointer-events-auto absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center z-50">
+            <h2 class="text-lg mb-4 text-yellow-300 pixel-font">KNOWLEDGE GATE</h2>
+            <div class="bg-black p-5 mb-4 border-2 border-white">
+                <p id="trivia-question" class="text-sm text-white font-bold leading-relaxed">Question?</p>
+            </div>
+            <div id="trivia-options" class="grid grid-cols-1 gap-3">
+                <!-- Options populated via JS -->
+            </div>
+        </div>
+
+        <!-- Penalty Overlay -->
+        <div id="penalty-overlay" class="pointer-events-auto">
+            <h1 class="text-5xl text-white pixel-font mb-4 text-center drop-shadow-[4px_4px_0_rgba(0,0,0,1)]">CRASH!</h1>
+            <p class="text-xl text-white font-bold pixel-font text-center mt-4">RECOVERING IN <br><br><span id="penalty-timer" class="text-yellow-300 text-4xl">2</span></p>
+        </div>
+
+        <!-- In-Game HUD -->
+        <div id="hud" class="absolute top-0 left-0 w-full p-4 pointer-events-none hidden flex justify-between items-start mt-10">
+            <div id="player-stats" class="bg-black/90 border-4 border-white p-4 hidden shadow-[4px_4px_0_rgba(0,0,0,1)]">
+                <div class="text-[10px] text-gray-400 pixel-font mb-2">LAP (WIN ON 3)</div>
+                <div class="text-2xl text-white pixel-font mb-4"><span id="lap-counter" class="text-green-400">1</span>/3</div>
+                <div class="text-[10px] text-gray-400 pixel-font mb-2">SPEED</div>
+                <div class="text-xl text-yellow-400 pixel-font" id="speed-display">0</div>
+                <div id="status-msg" class="text-[10px] text-green-400 mt-3 opacity-0 pixel-font font-bold">BOOST ACTIVE!</div>
+            </div>
+            
+            <div class="bg-black/90 border-4 border-white p-3 w-64 text-right ml-auto shadow-[4px_4px_0_rgba(0,0,0,1)]">
+                <div class="text-xs text-yellow-300 pixel-font border-b-2 border-gray-600 pb-2 mb-3 text-center">STANDINGS</div>
+                <ul id="live-leaderboard" class="space-y-4 text-[10px] md:text-xs pixel-font text-left">
+                    <!-- Populated by JS -->
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Post Race -->
+        <div id="post-race" class="retro-panel p-8 max-w-md w-full pointer-events-auto hidden text-center mx-4 relative z-50">
+            <h2 class="text-4xl text-yellow-400 mb-8 pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,1)]">FINISH!</h2>
+            <div class="text-lg mb-4 pixel-font text-gray-300">FINAL TIME<br><br><span id="final-time" class="text-3xl text-green-400">00:00.0</span></div>
+            <div class="text-lg mb-10 pixel-font">FINAL POSITION<br><br><span id="final-pos" class="text-6xl text-white block mt-6 drop-shadow-[4px_4px_0_rgba(0,0,0,1)] winner-anim">1ST</span></div>
+            <button onclick="window.location.reload()" class="w-full retro-btn py-4 px-4 text-xs pixel-font">RETURN TO MENU</button>
+        </div>
+    </div>
+
+    <!-- Mobile Controls -->
+    <div id="mobile-controls">
+        <div class="absolute w-full top-[-40px] text-center pointer-events-none">
+            <span class="bg-black/80 text-white pixel-font text-[10px] px-3 py-2 rounded border-2 border-white drop-shadow-md">USE BUTTONS OR TILT</span>
+        </div>
+        <div class="absolute left-4 bottom-4 flex space-x-2">
+            <div class="ctrl-btn" id="btn-left">&lt;</div>
+            <div class="ctrl-btn" id="btn-right">&gt;</div>
+        </div>
+        <div class="absolute right-4 bottom-4 flex space-x-2">
+            <div class="ctrl-btn" id="btn-brake" style="color:#ff5555; border-color:#ff5555; font-size:16px;">BRK</div>
+            <div class="ctrl-btn" id="btn-jump" style="color:#55ccff; border-color:#55ccff; font-size:14px;">JUMP</div>
+            <div class="ctrl-btn" id="btn-gas" style="color:#55ff55; border-color:#55ff55; font-size:16px;">GAS</div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ==========================================
+        // 1. GAME STATE & GLOBALS
+        // ==========================================
+        const state = {
+            userId: null,
+            sessionId: null, 
+            userName: "PLAYER" + Math.floor(Math.random() * 99),
+            carColor: "#EF4444",
+            gameMode: 'multi', 
+            gameId: null,
+            role: 'menu', 
+            gameState: 'menu', 
+            players: {}, 
+            myLap: 1,
+            myProgress: 0,
+            hasFinished: false,
+            triviaActive: false,
+            currentGateIndex: 0
+        };
+
+        let raceStartTime = 0;
+        let finalRaceTimeStr = "";
+
+        const physics = {
+            x: 0, y: 0.5, z: 0, 
+            rotation: 0,
+            camPan: 0, 
+            speed: 0,
+            maxSpeed: 1.3,
+            acceleration: 0.015, 
+            friction: 0.005,
+            turnSpeed: 0.045, 
+            boostTimer: 0,
+            curveT: 0,
+            vy: 0,           
+            groundY: 1.2, 
+            gravity: 0.03    
+        };
+
+        const inputs = { w: false, s: false, a: false, d: false, jump: false }; 
+        let gyroSteer = 0; 
+        
+        let lastSyncTime = 0;
+        const SYNC_RATE = 70; 
+
+        let scene, camera, renderer, trackCurve;
+        let trackCurvePoints = []; 
+        let localVehicleMesh = null;
+        const remoteVehicleMeshes = {};
+        const gateMeshes = [];
+        const colliders = []; 
+        
+        let db, auth;
+        let unsubscribePlayers = null;
+        let unsubscribeGame = null;
+
+        const triviaQuestions = [
+            { q: "Powerhouse of the cell?", options: ["Nucleus", "Mitochondria", "Ribosome"], a: 1 },
+            { q: "12 x 8 = ?", options: ["84", "96", "108"], a: 1 },
+            { q: "The Red Planet?", options: ["Venus", "Mars", "Jupiter"], a: 1 },
+            { q: "Titanic sank in?", options: ["1905", "1912", "1920"], a: 1 },
+            { q: "Chemical symbol for Gold?", options: ["Ag", "Au", "Gd"], a: 1 },
+            { q: "Square root of 144?", options: ["10", "12", "14"], a: 1 },
+            { q: "Painted the Mona Lisa?", options: ["Van Gogh", "Da Vinci", "Picasso"], a: 1 }
+        ];
+
+        // ==========================================
+        // 2. FIREBASE INIT
+        // ==========================================
+        const initFirebase = async () => {
+            try {
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
+                const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "mock", projectId: "mock" };
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        state.userId = user.uid;
+                        state.sessionId = user.uid + '_' + Math.random().toString(36).substr(2, 5);
+                        document.getElementById('loading-msg').style.display = 'none';
+                        document.getElementById('action-buttons').classList.remove('hidden');
+                        checkUrlForGame();
+                    }
+                });
+            } catch (err) {
+                console.error("Firebase init failed", err);
+                document.getElementById('loading-msg').innerText = "DB ERROR. USE SOLO PRACTICE.";
+                state.userId = "local_" + Math.floor(Math.random()*1000);
+                state.sessionId = state.userId;
+                document.getElementById('action-buttons').classList.remove('hidden');
+            }
+        };
+
+        // ==========================================
+        // 3. UI LOGIC & FLOW
+        // ==========================================
+        document.getElementById('player-name').value = state.userName;
+        document.getElementById('player-name').addEventListener('change', (e) => state.userName = e.target.value.toUpperCase() || "PLAYER");
+
+        document.querySelectorAll('.color-option').forEach(el => {
+            el.addEventListener('click', () => {
+                document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
+                el.classList.add('selected');
+                state.carColor = el.getAttribute('data-color');
+            });
+        });
+
+        const requestGyroPermission = async () => {
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    if (permission === 'granted') window.addEventListener('deviceorientation', handleOrientation);
+                } catch(e) { console.log("Gyro permission error"); }
+            } else {
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
+        };
+
+        const handleOrientation = (e) => {
+            if(state.role !== 'player') return;
+            let tilt = 0;
+            let orientation = (screen.orientation || {}).angle || window.orientation || 0;
+            if (orientation === 90) tilt = e.beta;
+            else if (orientation === -90) tilt = -e.beta;
+            else tilt = e.gamma;
+            
+            gyroSteer = Math.max(-1, Math.min(1, tilt / 35));
+        };
+
+        document.getElementById('btn-single').addEventListener('click', () => {
+            requestGyroPermission();
+            state.gameMode = 'single';
+            state.role = 'player';
+            state.gameId = 'local';
+            document.getElementById('main-menu').style.display = 'none';
+            initStartSequence();
+        });
+
+        document.getElementById('btn-create').addEventListener('click', async () => {
+            if (!auth || !db) return;
+            state.gameMode = 'multi';
+            const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+            state.gameId = code;
+            state.role = 'host';
+            
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
+            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'EduKartGames', code);
+            await setDoc(gameRef, { status: 'lobby', createdAt: new Date().getTime() });
+            
+            joinLobby(code);
+        });
+
+        document.getElementById('btn-join').addEventListener('click', () => {
+            requestGyroPermission();
+            state.gameMode = 'multi';
+            const code = document.getElementById('join-code').value.trim().toUpperCase();
+            if (code) {
+                state.role = 'player';
+                joinLobby(code);
+            }
+        });
+
+        const checkUrlForGame = () => {
+            const params = new URLSearchParams(window.location.search);
+            const gameCode = params.get('game');
+            if (gameCode) {
+                state.gameMode = 'multi';
+                document.getElementById('join-code').value = gameCode;
+                state.role = 'player';
+                requestGyroPermission();
+                joinLobby(gameCode.toUpperCase());
+            }
+        };
+
+        const joinLobby = async (code) => {
+            state.gameId = code;
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('lobby-menu').classList.remove('hidden');
+            document.getElementById('display-room-code').innerText = code;
+
+            if (state.role === 'host') {
+                document.getElementById('qrcode-container').classList.remove('hidden');
+                const joinUrl = window.location.origin + window.location.pathname + "?game=" + code;
+                new QRCode(document.getElementById('qrcode'), { text: joinUrl, width: 120, height: 120, colorDark : "#000", colorLight : "#fff" });
+                
+                document.getElementById('btn-start').classList.remove('hidden');
+                document.getElementById('waiting-host-msg').style.display = 'none';
+                
+                document.getElementById('btn-start').addEventListener('click', async () => {
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
+                    const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'EduKartGames', code);
+                    await updateDoc(gameRef, { status: 'countdown' }); 
+                });
+            }
+
+            setupNetworkListeners();
+            if (state.role === 'player') syncPlayerState(); 
+        };
+
+        const setupNetworkListeners = () => {
+            if (!db || !state.userId || state.gameMode === 'single') return;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
+            
+            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'EduKartGames', state.gameId);
+            unsubscribeGame = onSnapshot(gameRef, (snap) => {
+                if (snap.exists()) {
+                    const data = snap.data();
+                    if (data.status === 'countdown' && state.gameState === 'menu') {
+                        initStartSequence();
+                    }
+                }
+            }, (err) => console.error(err));
+
+            const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'EduKartPlayers');
+            unsubscribePlayers = onSnapshot(playersCol, (snapshot) => {
+                const lobbyList = document.getElementById('lobby-player-list');
+                if(lobbyList && state.gameState === 'menu') lobbyList.innerHTML = "";
+                
+                snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
+                    if (data.gameId === state.gameId) {
+                        state.players[docSnap.id] = data; 
+                        
+                        if (state.gameState === 'menu' && lobbyList) {
+                            const li = document.createElement('li');
+                            li.innerHTML = `<span style="display:inline-block; width:12px; height:12px; background-color:${data.carColor}; border:1px solid white;"></span> ${data.name}`;
+                            li.className = "border-b border-gray-700 pb-1";
+                            lobbyList.appendChild(li);
+                        }
+
+                        if (state.gameState === 'playing' || state.gameState === 'countdown') {
+                            if (state.role === 'host' || docSnap.id !== state.sessionId) {
+                                updateRemotePlayerMesh(docSnap.id, data);
+                            }
+                        }
+                    }
+                });
+                
+                if (state.gameState === 'playing') updateLeaderboardHUD();
+
+            }, (err) => console.error(err));
+        };
+
+        const syncPlayerState = async () => {
+            if (!db || !state.sessionId || state.gameState === 'finished' || state.role !== 'player' || state.gameMode === 'single') return;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
+            const playerRef = doc(db, 'artifacts', appId, 'public', 'data', 'EduKartPlayers', state.sessionId);
+            
+            try {
+                await setDoc(playerRef, {
+                    gameId: state.gameId,
+                    name: state.userName,
+                    carColor: state.carColor,
+                    x: physics.x,
+                    y: physics.y,
+                    z: physics.z,
+                    rotation: physics.rotation,
+                    lap: state.myLap,
+                    progress: state.myProgress,
+                    timestamp: new Date().getTime()
+                }, { merge: true });
+            } catch(e) {}
+        };
+
+        // ==========================================
+        // 4. START SEQUENCE & CELEBRATIONS
+        // ==========================================
+        const initStartSequence = () => {
+            state.gameState = 'countdown';
+            document.getElementById('lobby-menu').style.display = 'none';
+            document.getElementById('game-canvas').style.display = 'block';
+            
+            init3D();
+
+            if (state.role === 'player') {
+                const startPoint = trackCurve.getPointAt(0);
+                const startDir = trackCurve.getTangentAt(0);
+                const offset = (Math.random() - 0.5) * 60; 
+                
+                physics.x = startPoint.x + (startDir.z * offset);
+                physics.y = physics.groundY; 
+                physics.z = startPoint.z - (startDir.x * offset);
+                physics.rotation = Math.atan2(startDir.x, startDir.z);
+                physics.curveT = 0;
+
+                if (localVehicleMesh) {
+                    localVehicleMesh.position.set(physics.x, physics.y, physics.z);
+                    localVehicleMesh.rotation.y = physics.rotation;
+                }
+
+                if(state.gameMode === 'multi') syncPlayerState(); 
+            }
+
+            animate(); 
+
+            const overlay = document.getElementById('countdown-overlay');
+            const lRed = document.getElementById('light-red');
+            const lYellow = document.getElementById('light-yellow');
+            const lGreen = document.getElementById('light-green');
+            const tText = document.getElementById('countdown-text');
+            
+            overlay.style.display = 'flex';
+            
+            setTimeout(() => { lRed.classList.add('red'); tText.innerText = "3..."; }, 1000);
+            setTimeout(() => { lYellow.classList.add('yellow'); tText.innerText = "2..."; }, 2000);
+            setTimeout(() => { 
+                lGreen.classList.add('green'); 
+                tText.innerText = "1..."; 
+                tText.style.color = "#00ff00";
+            }, 3000);
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                
+                state.gameState = 'playing';
+                raceStartTime = Date.now();
+                document.getElementById('hud').classList.remove('hidden');
+                document.getElementById('global-timer').classList.remove('hidden');
+                
+                if (state.role === 'player') {
+                    document.getElementById('player-stats').classList.remove('hidden');
+                    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                        document.getElementById('mobile-controls').style.display = 'block';
+                    }
+                }
+            }, 4000);
+        };
+
+        const startConfetti = () => {
+            const canvas = document.getElementById('confetti-canvas');
+            canvas.style.display = 'block';
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            const ctx = canvas.getContext('2d');
+            const particles = [];
+            
+            for(let i=0; i<150; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width, 
+                    y: Math.random() * canvas.height - canvas.height,
+                    vx: (Math.random() - 0.5) * 6, 
+                    vy: Math.random() * 6 + 3,
+                    c: ['#EF4444','#3B82F6','#22C55E','#FACC15','#A855F7'][Math.floor(Math.random()*5)],
+                    s: Math.random() * 12 + 6, 
+                    r: Math.random() * 360, 
+                    dr: (Math.random() - 0.5) * 15
+                });
+            }
+            
+            const renderConfetti = () => {
+                if(!state.hasFinished) return;
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+                particles.forEach(p => {
+                    p.x += p.vx; p.y += p.vy; p.r += p.dr;
+                    if(p.y > canvas.height) { p.y = -10; p.x = Math.random()*canvas.width; }
+                    ctx.save(); 
+                    ctx.translate(p.x, p.y); 
+                    ctx.rotate(p.r*Math.PI/180);
+                    ctx.fillStyle = p.c; 
+                    ctx.fillRect(-p.s/2, -p.s/2, p.s, p.s); 
+                    ctx.restore();
+                });
+                requestAnimationFrame(renderConfetti);
+            };
+            renderConfetti();
+        };
+
+        // ==========================================
+        // 5. THREE.JS FLAT TRACK ENGINE
+        // ==========================================
+        const init3D = () => {
+            const container = document.getElementById('game-canvas');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x6CB4EE); 
+            scene.fog = new THREE.Fog(0x6CB4EE, 40, 400);
+
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 2000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: false });
+            renderer.setSize(window.innerWidth / 3.5, window.innerHeight / 3.5, false); 
+            
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+            dirLight.position.set(100, 200, 50);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 500;
+            dirLight.shadow.camera.left = -200;
+            dirLight.shadow.camera.right = 200;
+            dirLight.shadow.camera.top = 200;
+            dirLight.shadow.camera.bottom = -200;
+            scene.add(dirLight);
+
+            createRetroEnvironment();
+            
+            if (state.role === 'player') {
+                localVehicleMesh = createMonsterTruck(state.carColor, state.userName, true);
+                scene.add(localVehicleMesh);
+            }
+            
+            window.addEventListener('resize', onWindowResize, false);
+            setupInputs();
+        };
+
+        const createRetroEnvironment = () => {
+            let seed = 999;
+            const srnd = () => {
+                let x = Math.sin(seed++) * 10000;
+                return x - Math.floor(x);
+            };
+
+            const groundGeo = new THREE.PlaneGeometry(2500, 2500);
+            const groundMat = new THREE.MeshLambertMaterial({ color: 0x3b7a3b }); 
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.51; // Just below the flattened road surface
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            trackCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0, 0, 150),      
+                new THREE.Vector3(120, 0, 120),   
+                new THREE.Vector3(180, 0, 0),     
+                new THREE.Vector3(120, 0, -120),  
+                new THREE.Vector3(0, 0, -180),     
+                new THREE.Vector3(-120, 0, -120), 
+                new THREE.Vector3(-180, 0, 0),    
+                new THREE.Vector3(-120, 0, 120)   
+            ], true); 
+
+            trackCurvePoints = trackCurve.getSpacedPoints(1000);
+
+            const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#2d2d2d'; ctx.fillRect(0,0,128,128); 
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 4, 128, 6); ctx.fillRect(0, 118, 128, 6); 
+            ctx.fillStyle = '#ffcc00'; ctx.fillRect(16, 62, 32, 4); ctx.fillRect(80, 62, 32, 4);
+            const roadTex = new THREE.CanvasTexture(canvas);
+            roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping;
+            roadTex.repeat.set(250, 1); 
+
+            const tubeGeo = new THREE.TubeGeometry(trackCurve, 200, 50, 4, true);
+            const trackMat = new THREE.MeshLambertMaterial({ map: roadTex, side: THREE.DoubleSide });
+            const track = new THREE.Mesh(tubeGeo, trackMat);
+            
+            track.scale.set(1, 0.01, 1); 
+            track.position.y = -0.5; 
+            track.receiveShadow = true;
+            scene.add(track);
+
+            const treeMatWood = new THREE.MeshLambertMaterial({color: 0x5C4033});
+            const treeMatLeaf = new THREE.MeshLambertMaterial({color: 0x1E5128});
+            const rockMat = new THREE.MeshLambertMaterial({color: 0x777777});
+
+            const createLowPolyTree = () => {
+                const group = new THREE.Group();
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.5, 6, 6), treeMatWood);
+                trunk.position.y = 3; trunk.castShadow = true;
+                const leaves1 = new THREE.Mesh(new THREE.ConeGeometry(7, 10, 6), treeMatLeaf); 
+                leaves1.position.y = 8; leaves1.castShadow = true;
+                const leaves2 = new THREE.Mesh(new THREE.ConeGeometry(5, 8, 6), treeMatLeaf); 
+                leaves2.position.y = 13; leaves2.castShadow = true;
+                group.add(trunk, leaves1, leaves2);
+                return group;
+            };
+
+            for(let i=0; i<120; i++) { 
+                const t = i/120;
+                const pt = trackCurve.getPointAt(t);
+                const tangent = trackCurve.getTangentAt(t);
+                
+                [-1, 1].forEach(side => {
+                    if (srnd() > 0.6) return; 
+                    const offset = side * (65 + srnd() * 40); 
+                    const tx = pt.x + (tangent.z * offset);
+                    const tz = pt.z - (tangent.x * offset);
+                    
+                    const yPos = 0; 
+
+                    let isTree = srnd() > 0.4;
+                    let obj, radius, height;
+                    if (isTree) {
+                        obj = createLowPolyTree();
+                        radius = 4;
+                        height = 15;
+                    } else {
+                        const size = 3 + srnd() * 4;
+                        obj = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 0), rockMat);
+                        obj.rotation.y = srnd() * Math.PI;
+                        obj.position.y = size - 1; 
+                        obj.castShadow = true;
+                        radius = size * 0.8;
+                        height = size * 2;
+                    }
+                    
+                    obj.position.x = tx;
+                    obj.position.z = tz;
+                    if(isTree) obj.position.y = yPos;
+                    scene.add(obj);
+                    colliders.push({ x: tx, z: tz, radius: radius, h: height });
+                });
+            }
+
+            const startPt = trackCurve.getPointAt(0);
+            const startDir = trackCurve.getTangentAt(0);
+            const cbCanvas = document.createElement('canvas'); cbCanvas.width = 64; cbCanvas.height = 64;
+            const cbCtx = cbCanvas.getContext('2d');
+            cbCtx.fillStyle = '#fff'; cbCtx.fillRect(0,0,64,64);
+            cbCtx.fillStyle = '#000'; cbCtx.fillRect(0,0,32,32); cbCtx.fillRect(32,32,32,32);
+            const cbTex = new THREE.CanvasTexture(cbCanvas); cbTex.wrapS = cbTex.wrapT = THREE.RepeatWrapping; cbTex.repeat.set(28, 2);
+
+            const line = new THREE.Mesh(new THREE.BoxGeometry(110, 0.5, 6), new THREE.MeshLambertMaterial({map: cbTex}));
+            line.position.set(startPt.x, 0.02, startPt.z);
+            line.rotation.y = Math.atan2(startDir.x, startDir.z);
+            line.receiveShadow = true;
+            scene.add(line);
+
+            const gateTValues = [0.33, 0.66]; 
+            gateTValues.forEach((gt) => {
+                const pt = trackCurve.getPointAt(gt);
+                const dir = trackCurve.getTangentAt(gt);
+                
+                const group = new THREE.Group();
+                const pMat = new THREE.MeshLambertMaterial({color: 0x444444});
+                const p1 = new THREE.Mesh(new THREE.BoxGeometry(4, 35, 4), pMat); p1.position.set(-55, 17.5, 0); p1.castShadow=true;
+                const p2 = new THREE.Mesh(new THREE.BoxGeometry(4, 35, 4), pMat); p2.position.set(55, 17.5, 0); p2.castShadow=true;
+                const wall = new THREE.Mesh(new THREE.BoxGeometry(110, 30, 1), new THREE.MeshBasicMaterial({color: 0x00ffff, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending}));
+                wall.position.set(0, 15, 0);
+
+                group.add(p1); group.add(p2); group.add(wall);
+                group.position.set(pt.x, 0, pt.z); 
+                group.rotation.y = Math.atan2(dir.x, dir.z);
+                scene.add(group);
+                
+                const p1Pos = new THREE.Vector3(-55, 0, 0).applyAxisAngle(new THREE.Vector3(0,1,0), Math.atan2(dir.x, dir.z)).add(pt);
+                const p2Pos = new THREE.Vector3(55, 0, 0).applyAxisAngle(new THREE.Vector3(0,1,0), Math.atan2(dir.x, dir.z)).add(pt);
+                colliders.push({ x: p1Pos.x, z: p1Pos.z, radius: 4, h: 35 });
+                colliders.push({ x: p2Pos.x, z: p2Pos.z, radius: 4, h: 35 });
+
+                gateMeshes.push({ t: gt, group: group, wall: wall, active: true });
+            });
+        };
+
+        const createMonsterTruck = (colorHex, name, isLocal) => {
+            const group = new THREE.Group();
+            
+            const mat = new THREE.MeshLambertMaterial({color: colorHex});
+            const darkMat = new THREE.MeshLambertMaterial({color: 0x222222});
+            const windowMat = new THREE.MeshLambertMaterial({color: 0x111111});
+            const suspensionMat = new THREE.MeshLambertMaterial({color: 0xaaaaaa});
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.5, 6), mat); 
+            body.position.y = 1.5; body.castShadow = true;
+            
+            const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.2, 3), windowMat); 
+            cabin.position.set(0, 2.5, -0.5); cabin.castShadow = true;
+            
+            const bed = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.5, 2), darkMat);
+            bed.position.set(0, 1.8, -2); bed.castShadow = true;
+            
+            const axleGeo = new THREE.CylinderGeometry(0.2, 0.2, 5.5);
+            const frontAxle = new THREE.Mesh(axleGeo, suspensionMat); frontAxle.rotation.z = Math.PI/2; frontAxle.position.set(0, 0, 2);
+            const rearAxle = new THREE.Mesh(axleGeo, suspensionMat); rearAxle.rotation.z = Math.PI/2; rearAxle.position.set(0, 0, -2);
+
+            const wGeo = new THREE.CylinderGeometry(1.2, 1.2, 1.0, 16);
+            const positions = [[-2.5, 0, 2.0], [2.5, 0, 2.0], [-2.5, 0, -2.0], [2.5, 0, -2.0]];
+            positions.forEach(pos => {
+                const w = new THREE.Mesh(wGeo, darkMat);
+                w.rotation.z = Math.PI / 2;
+                w.position.set(...pos);
+                w.castShadow = true;
+                group.add(w);
+            });
+
+            group.add(body, cabin, bed, frontAxle, rearAxle);
+            
+            // Add Sprite label
+            const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = isLocal ? '#4ade80' : '#ffffff';
+            ctx.font = 'bold 36px Courier New';
+            ctx.textAlign = 'center'; ctx.fillText(name || "PLAYER", 128, 45);
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), depthTest: false }));
+            sprite.scale.set(15, 3.75, 1); 
+            sprite.position.y = 5.5;
+            group.add(sprite);
+
+            return group;
+        };
+
+        const updateRemotePlayerMesh = (id, data) => {
+            if (!remoteVehicleMeshes[id]) {
+                const mesh = createMonsterTruck(data.carColor, data.name, false);
+                mesh.position.set(data.x, data.y, data.z); 
+                mesh.rotation.y = data.rotation;
+                scene.add(mesh);
+                remoteVehicleMeshes[id] = mesh;
+            }
+            const mesh = remoteVehicleMeshes[id];
+            mesh.userData.targetX = data.x;
+            mesh.userData.targetY = data.y;
+            mesh.userData.targetZ = data.z;
+            mesh.userData.targetRot = data.rotation;
+        };
+
+        const onWindowResize = () => {
+            if(!camera || !renderer) return;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth / 3.5, window.innerHeight / 3.5, false);
+        };
+
+        // ==========================================
+        // 6. INPUT & CONTROLS
+        // ==========================================
+        const setupInputs = () => {
+            if(state.role !== 'player') return;
+            
+            document.addEventListener('keydown', (e) => {
+                if(e.key === 'w' || e.key === 'ArrowUp') inputs.w = true;
+                if(e.key === 's' || e.key === 'ArrowDown') inputs.s = true;
+                if(e.key === 'a' || e.key === 'ArrowLeft') inputs.a = true;
+                if(e.key === 'd' || e.key === 'ArrowRight') inputs.d = true;
+                if(e.key === ' ' || e.code === 'Space') inputs.jump = true;
+            });
+            document.addEventListener('keyup', (e) => {
+                if(e.key === 'w' || e.key === 'ArrowUp') inputs.w = false;
+                if(e.key === 's' || e.key === 'ArrowDown') inputs.s = false;
+                if(e.key === 'a' || e.key === 'ArrowLeft') inputs.a = false;
+                if(e.key === 'd' || e.key === 'ArrowRight') inputs.d = false;
+                if(e.key === ' ' || e.code === 'Space') inputs.jump = false;
+            });
+
+            const bindTouch = (id, key) => {
+                const el = document.getElementById(id);
+                if(el) {
+                    el.addEventListener('touchstart', (e) => { e.preventDefault(); inputs[key] = true; });
+                    el.addEventListener('touchend', (e) => { e.preventDefault(); inputs[key] = false; });
+                }
+            };
+            bindTouch('btn-gas', 'w'); bindTouch('btn-brake', 's');
+            bindTouch('btn-left', 'a'); bindTouch('btn-right', 'd');
+            bindTouch('btn-jump', 'jump');
+        };
+
+        // ==========================================
+        // 7. GAME LOOP & LOGIC
+        // ==========================================
+        const animate = () => {
+            requestAnimationFrame(animate);
+            if (state.gameState !== 'playing' && state.gameState !== 'countdown') return;
+
+            const now = Date.now();
+
+            if (state.role === 'player') {
+                if (state.gameState === 'playing') {
+                    updatePhysics();
+                    updateCurveProgressAndGates();
+                }
+                updateCameraPlayer();
+                if (state.gameMode === 'multi' && now - lastSyncTime > SYNC_RATE) {
+                    syncPlayerState();
+                    lastSyncTime = now;
+                }
+            } 
+
+            for (let id in remoteVehicleMeshes) {
+                const mesh = remoteVehicleMeshes[id];
+                if (mesh.userData.targetX !== undefined) {
+                    mesh.position.x += (mesh.userData.targetX - mesh.position.x) * 0.2;
+                    mesh.position.y += (mesh.userData.targetY - mesh.position.y) * 0.2;
+                    mesh.position.z += (mesh.userData.targetZ - mesh.position.z) * 0.2;
+                    
+                    let diff = mesh.userData.targetRot - mesh.rotation.y;
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    while (diff > Math.PI) diff -= Math.PI * 2;
+                    mesh.rotation.y += diff * 0.2;
+                }
+            }
+
+            gateMeshes.forEach(gm => {
+                if(gm.active) gm.wall.material.opacity = 0.3 + Math.sin(now * 0.005) * 0.2;
+            });
+
+            updateLeaderboardHUD();
+
+            if (state.role === 'host') {
+                renderHostView();
+            } else {
+                renderer.render(scene, camera);
+            }
+        };
+
+        const renderHostView = () => {
+            const w = window.innerWidth / 3.5; 
+            const h = window.innerHeight / 3.5;
+            renderer.setScissorTest(true);
+
+            const pIds = Object.keys(state.players);
+            const activeIds = pIds.slice(0, 4);
+
+            const views = [
+                [0, h/2, w/2, h/2],       
+                [w/2, h/2, w/2, h/2],     
+                [0, 0, w/2, h/2],         
+                [w/2, 0, w/2, h/2]        
+            ];
+
+            if (activeIds.length > 0) {
+                activeIds.forEach((id, index) => {
+                    const mesh = remoteVehicleMeshes[id];
+                    if(!mesh) {
+                        updateRemotePlayerMesh(id, state.players[id]);
+                        return;
+                    }
+
+                    renderer.setViewport(views[index][0], views[index][1], views[index][2], views[index][3]);
+                    renderer.setScissor(views[index][0], views[index][1], views[index][2], views[index][3]);
+
+                    camera.position.set(mesh.position.x + Math.sin(mesh.rotation.y)*-25, mesh.position.y + 15, mesh.position.z + Math.cos(mesh.rotation.y)*-25);
+                    camera.lookAt(mesh.position.x, mesh.position.y, mesh.position.z);
+                    renderer.render(scene, camera);
+                });
+            } else {
+                renderer.setViewport(0, 0, w, h);
+                renderer.setScissor(0, 0, w, h);
+                const t = Date.now() * 0.0001;
+                camera.position.set(Math.cos(t)*150, 80, Math.sin(t)*150);
+                camera.lookAt(0,0,0);
+                renderer.render(scene, camera);
+            }
+
+            renderer.setScissorTest(false);
+        };
+
+        const updatePhysics = () => {
+            if (state.triviaActive || state.hasFinished) return;
+
+            let currentMaxSpeed = physics.maxSpeed;
+            if (physics.boostTimer > 0) {
+                currentMaxSpeed = physics.maxSpeed * 1.5;
+                physics.boostTimer--;
+            }
+
+            if (inputs.jump && physics.y <= physics.groundY + 0.1) {
+                physics.vy = 0.6; 
+            }
+
+            physics.vy -= physics.gravity;
+            physics.y += physics.vy;
+            if (physics.y <= physics.groundY) {
+                physics.y = physics.groundY;
+                physics.vy = 0;
+            }
+
+            if (inputs.w) physics.speed += physics.acceleration;
+            else if (inputs.s) physics.speed -= physics.acceleration * 1.5;
+            else {
+                if (physics.speed > 0) physics.speed -= physics.friction;
+                if (physics.speed < 0) physics.speed += physics.friction;
+                if (Math.abs(physics.speed) < physics.friction) physics.speed = 0;
+            }
+
+            if (physics.speed > currentMaxSpeed) physics.speed = currentMaxSpeed;
+            if (physics.speed < -currentMaxSpeed / 2) physics.speed = -currentMaxSpeed / 2;
+
+            let keyTurn = 0;
+            if (inputs.a) keyTurn = 1;
+            if (inputs.d) keyTurn = -1;
+            let currentTurn = keyTurn !== 0 ? keyTurn : -gyroSteer;
+
+            if (Math.abs(physics.speed) > 0.05) {
+                const turnMod = physics.speed > 0 ? 1 : -1;
+                physics.rotation += physics.turnSpeed * currentTurn * turnMod;
+                physics.camPan *= 0.8; 
+            } else {
+                physics.camPan += currentTurn * 0.05;
+                physics.camPan = Math.max(-1.5, Math.min(1.5, physics.camPan));
+            }
+
+            physics.x += Math.sin(physics.rotation) * physics.speed;
+            physics.z += Math.cos(physics.rotation) * physics.speed;
+
+            const checkCollision = (cx, cz, radius, objHeight) => {
+                if (physics.y > objHeight) return;
+
+                let dx = physics.x - cx;
+                let dz = physics.z - cz;
+                let dist = Math.hypot(dx, dz);
+                const combinedRadius = radius + 2.0; 
+                if (dist < combinedRadius) {
+                    let overlap = combinedRadius - dist;
+                    let nx = dx / dist;
+                    let nz = dz / dist;
+                    physics.x += nx * overlap;
+                    physics.z += nz * overlap;
+                    physics.speed *= -0.4; 
+                }
+            };
+
+            for(let c of colliders) checkCollision(c.x, c.z, c.radius, c.h);
+            
+            for(let id in remoteVehicleMeshes) {
+                const rm = remoteVehicleMeshes[id];
+                checkCollision(rm.position.x, rm.position.z, 2.5, 5.0); 
+            }
+
+            localVehicleMesh.position.set(physics.x, physics.y, physics.z);
+            localVehicleMesh.rotation.y = physics.rotation;
+
+            document.getElementById('lap-counter').innerText = Math.min(state.myLap, 3);
+            document.getElementById('speed-display').innerText = Math.floor(Math.abs(physics.speed) * 100);
+        };
+
+        const updateCurveProgressAndGates = () => {
+            let closestDist = Infinity;
+            let closestIdx = 0;
+            for(let i=0; i<trackCurvePoints.length; i++){
+                let d = Math.hypot(physics.x - trackCurvePoints[i].x, physics.z - trackCurvePoints[i].z);
+                if(d < closestDist){ closestDist = d; closestIdx = i; }
+            }
+            
+            let currentT = closestIdx / 1000;
+            
+            if(closestDist > 52 && physics.boostTimer <= 0) {
+                physics.speed *= 0.92; 
+            }
+
+            if (physics.curveT > 0.8 && currentT < 0.2) {
+                state.myLap++;
+                gateMeshes.forEach(gm => { gm.active = true; gm.wall.visible = true; }); 
+                state.currentGateIndex = 0;
+                if (state.myLap > 3) finishRace();
+            } else if (physics.curveT < 0.2 && currentT > 0.8) {
+                state.myLap = Math.max(1, state.myLap - 1); 
+            }
+            
+            physics.curveT = currentT;
+            state.myProgress = (state.myLap * 10) + currentT;
+
+            if(state.currentGateIndex < gateMeshes.length) {
+                const targetGate = gateMeshes[state.currentGateIndex];
+                if (!state.triviaActive && targetGate.active && currentT > targetGate.t - 0.02 && currentT < targetGate.t + 0.02) {
+                    triggerTrivia(state.currentGateIndex);
+                }
+            }
+        };
+
+        const updateCameraPlayer = () => {
+            const camAngle = physics.rotation + physics.camPan;
+            const camOffsetZ = Math.cos(camAngle) * -25;
+            const camOffsetX = Math.sin(camAngle) * -25;
+            
+            camera.position.x += ((physics.x + camOffsetX) - camera.position.x) * 0.15;
+            camera.position.z += ((physics.z + camOffsetZ) - camera.position.z) * 0.15;
+            camera.position.y += ((physics.y + 12) - camera.position.y) * 0.15;
+
+            camera.lookAt(physics.x, physics.y + 1.5, physics.z);
+        };
+
+        // ==========================================
+        // 8. KNOWLEDGE GATES
+        // ==========================================
+        const triggerTrivia = (gateIndex) => {
+            state.triviaActive = true;
+            physics.speed = 0; 
+            
+            const qObj = triviaQuestions[Math.floor(Math.random() * triviaQuestions.length)];
+            
+            document.getElementById('trivia-question').innerText = qObj.q;
+            const optsContainer = document.getElementById('trivia-options');
+            optsContainer.innerHTML = '';
+            
+            qObj.options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = "retro-btn py-3 px-2 text-xs w-full";
+                btn.innerText = opt;
+                btn.onclick = () => handleTriviaAnswer(idx === qObj.a, gateIndex);
+                optsContainer.appendChild(btn);
+            });
+            
+            document.getElementById('trivia-modal').style.display = 'block';
+        };
+
+        const handleTriviaAnswer = (isCorrect, gateIndex) => {
+            document.getElementById('trivia-modal').style.display = 'none';
+            
+            if (isCorrect) {
+                gateMeshes[gateIndex].active = false;
+                gateMeshes[gateIndex].wall.visible = false;
+                state.currentGateIndex++;
+                state.triviaActive = false;
+                
+                physics.boostTimer = 100;
+                const msgEl = document.getElementById('status-msg');
+                msgEl.style.opacity = 1;
+                setTimeout(() => { msgEl.style.opacity = 0; }, 2000);
+            } else {
+                document.getElementById('penalty-overlay').style.display = 'flex';
+                let timer = 3;
+                document.getElementById('penalty-timer').innerText = timer;
+                const int = setInterval(() => {
+                    timer--;
+                    document.getElementById('penalty-timer').innerText = timer;
+                    if (timer <= 0) {
+                        clearInterval(int);
+                        document.getElementById('penalty-overlay').style.display = 'none';
+                        setTimeout(() => triggerTrivia(gateIndex), 100); 
+                    }
+                }, 1000);
+            }
+        };
+
+        // ==========================================
+        // 9. LEADERBOARD
+        // ==========================================
+        const updateLeaderboardHUD = () => {
+            if (state.gameState === 'playing' && raceStartTime > 0 && !state.hasFinished) {
+                const elapsed = Date.now() - raceStartTime;
+                const mins = Math.floor(elapsed / 60000).toString().padStart(2, '0');
+                const secs = Math.floor((elapsed % 60000) / 1000).toString().padStart(2, '0');
+                const ms = Math.floor((elapsed % 1000) / 100).toString();
+                finalRaceTimeStr = `${mins}:${secs}.${ms}`;
+                document.getElementById('global-timer').innerText = finalRaceTimeStr;
+            }
+
+            let sortedPlayers = [];
+            if(state.role === 'player') {
+                sortedPlayers.push({ name: state.userName, progress: state.myProgress, lap: state.myLap, me: true });
+            }
+            
+            if (state.gameMode === 'multi') {
+                for (let id in state.players) {
+                    if (state.role === 'player' && id === state.sessionId) continue; // Prevent duplicates in the list
+                    sortedPlayers.push({ 
+                        name: state.players[id].name, 
+                        progress: state.players[id].progress || 0,
+                        lap: state.players[id].lap || 1,
+                        me: false 
+                    });
+                }
+            }
+            
+            sortedPlayers.sort((a, b) => b.progress - a.progress);
+            
+            const listEl = document.getElementById('live-leaderboard');
+            if(listEl) listEl.innerHTML = "";
+            
+            sortedPlayers.forEach((p, idx) => {
+                const li = document.createElement('li');
+                li.className = p.me ? "text-green-400 font-bold" : "text-white";
+                li.innerText = `${idx+1}. ${p.name.substring(0,8)} (L${Math.min(p.lap,3)})`;
+                if(listEl) listEl.appendChild(li);
+                
+                if (p.me && state.role === 'player') {
+                    document.getElementById('final-pos').innerText = `${idx+1}`;
+                }
+            });
+        };
+
+        const finishRace = () => {
+            if(state.hasFinished) return;
+            state.hasFinished = true;
+            state.gameState = 'finished';
+            physics.speed = 0;
+            
+            document.getElementById('final-time').innerText = finalRaceTimeStr;
+            document.getElementById('global-timer').style.display = 'none';
+            document.getElementById('player-stats').style.display = 'none';
+            document.getElementById('mobile-controls').style.display = 'none';
+            document.getElementById('post-race').classList.remove('hidden');
+
+            startConfetti();
+        };
+
+        window.onload = initFirebase;
+
+    </script>
+</body>
+</html>
