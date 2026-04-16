@@ -339,15 +339,30 @@
             checkUrlForGame();
         };
 
-        // WebRTC config with highly reliable STUN servers (removed free TURN which causes connection hangs)
+        // WebRTC config with highly reliable STUN servers and TURN fallback for strict NATs (Cellular/Corporate)
         const peerConfig = {
             debug: 2,
+            pingInterval: 5000, // Keep connection alive through firewalls
             config: {
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
                     { urls: 'stun:stun1.l.google.com:19302' },
                     { urls: 'stun:stun.cloudflare.com:3478' },
-                    { urls: 'stun:stun.twilio.com:3478' }
+                    {
+                        urls: 'turn:openrelay.metered.ca:80',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    },
+                    {
+                        urls: 'turn:openrelay.metered.ca:443',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    },
+                    {
+                        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    }
                 ]
             }
         };
@@ -510,7 +525,8 @@
                 peer.on('open', (id) => {
                     clearTimeout(timeout);
                     state.sessionId = id;
-                    hostConn = peer.connect('edukart-' + code.toLowerCase());
+                    // Force lowercase ID to match host and enforce reliable data channel
+                    hostConn = peer.connect('edukart-' + code.toLowerCase(), { reliable: true });
 
                     hostConn.on('open', () => {
                         document.getElementById('loading-msg').style.display = 'none';
