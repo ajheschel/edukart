@@ -88,6 +88,8 @@
             50% { transform: translateY(-20px) scale(1.1); color: #fff; }
         }
         .winner-anim { animation: bounceWinner 0.8s infinite ease-in-out; }
+        
+        #score-display { transition: all 0.2s ease; }
     </style>
 </head>
 <body>
@@ -204,14 +206,16 @@
             <div id="player-stats" class="bg-black/60 border-2 md:border-4 border-white p-2 md:p-4 hidden shadow-md">
                 <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1">LAP</div>
                 <div class="text-lg md:text-2xl text-white pixel-font mb-2 md:mb-4"><span id="lap-counter" class="text-green-400">1</span>/3</div>
+                <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1">SCORE</div>
+                <div class="text-sm md:text-xl text-yellow-400 pixel-font mb-2 md:mb-4" id="score-display">1000</div>
                 <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1">SPEED</div>
-                <div class="text-sm md:text-xl text-yellow-400 pixel-font" id="speed-display">0</div>
+                <div class="text-sm md:text-xl text-white pixel-font" id="speed-display">0</div>
                 <div id="status-msg" class="text-[8px] md:text-[10px] text-green-400 mt-2 opacity-0 pixel-font font-bold">BOOST ACTIVE!</div>
             </div>
             
-            <div class="bg-black/60 border-2 md:border-4 border-white p-2 md:p-3 w-28 md:w-64 text-right ml-auto shadow-md">
+            <div class="bg-black/60 border-2 md:border-4 border-white p-2 md:p-3 w-32 md:w-64 text-right ml-auto shadow-md">
                 <div class="text-[8px] md:text-xs text-yellow-300 pixel-font border-b md:border-b-2 border-gray-600 pb-1 md:pb-2 mb-2 text-center">STANDINGS</div>
-                <ul id="live-leaderboard" class="space-y-2 md:space-y-4 text-[8px] md:text-xs pixel-font text-left">
+                <ul id="live-leaderboard" class="space-y-2 md:space-y-4 text-[7px] md:text-[10px] pixel-font text-left">
                     <!-- Populated by JS -->
                 </ul>
             </div>
@@ -220,6 +224,7 @@
         <!-- Post Race -->
         <div id="post-race" class="retro-panel p-8 max-w-md w-full pointer-events-auto hidden text-center mx-4 relative z-50">
             <h2 class="text-4xl text-yellow-400 mb-8 pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,1)]">FINISH!</h2>
+            <div class="text-lg mb-4 pixel-font text-gray-300">FINAL SCORE<br><br><span id="final-score" class="text-3xl text-yellow-400">1000</span></div>
             <div class="text-lg mb-4 pixel-font text-gray-300">FINAL TIME<br><br><span id="final-time" class="text-3xl text-green-400">00:00.0</span></div>
             <div class="text-lg mb-10 pixel-font">FINAL POSITION<br><br><span id="final-pos" class="text-6xl text-white block mt-6 drop-shadow-[4px_4px_0_rgba(0,0,0,1)] winner-anim">1ST</span></div>
             <button onclick="window.location.reload()" class="w-full retro-btn py-4 px-4 text-xs pixel-font">RETURN TO MENU</button>
@@ -255,6 +260,7 @@
             players: {}, 
             myLap: 1,
             myProgress: 0,
+            myScore: 1000,
             hasFinished: false,
             triviaActive: false,
             currentGateIndex: 0
@@ -278,6 +284,7 @@
             friction: 0.005,
             turnSpeed: 0.045, 
             boostTimer: 0,
+            bumpCooldown: 0,
             curveT: 0,
             vy: 0,            
             groundY: 1.2, 
@@ -308,24 +315,29 @@
         
         // AI Bot Data (For Solo Practice Mode)
         const botData = [
-            { id: 'bot_titan', name: 'TITAN', color: '#22C55E', offset: 25, baseSpeed: 0.00045, active: false, curveT: 0, lap: 1, waitTimer: 0, speedMult: 1.0, passedGates: [] },
-            { id: 'bot_crusher', name: 'CRUSHER', color: '#3B82F6', offset: -25, baseSpeed: 0.00043, active: false, curveT: 0, lap: 1, waitTimer: 0, speedMult: 1.0, passedGates: [] },
-            { id: 'bot_behemoth', name: 'BEHEMOTH', color: '#A855F7', offset: 0, baseSpeed: 0.00041, active: false, curveT: 0, lap: 1, waitTimer: 0, speedMult: 1.0, passedGates: [] }
+            { id: 'bot_titan', name: 'TITAN', color: '#22C55E', offset: 25, baseSpeed: 0.00045, active: false, curveT: 0, lap: 1, waitTimer: 0, speedMult: 1.0, score: 1000, passedGates: [] },
+            { id: 'bot_crusher', name: 'CRUSHER', color: '#3B82F6', offset: -25, baseSpeed: 0.00043, active: false, curveT: 0, lap: 1, waitTimer: 0, speedMult: 1.0, score: 1000, passedGates: [] },
+            { id: 'bot_behemoth', name: 'BEHEMOTH', color: '#A855F7', offset: 0, baseSpeed: 0.00041, active: false, curveT: 0, lap: 1, waitTimer: 0, speedMult: 1.0, score: 1000, passedGates: [] }
         ];
 
         const triviaQuestions = [
-            { q: "Powerhouse of the cell?", options: ["Nucleus", "Mitochondria", "Ribosome"], a: 1 },
-            { q: "12 x 8 = ?", options: ["84", "96", "108"], a: 1 },
-            { q: "The Red Planet?", options: ["Venus", "Mars", "Jupiter"], a: 1 },
-            { q: "Titanic sank in?", options: ["1905", "1912", "1920"], a: 1 },
-            { q: "Chemical symbol for Gold?", options: ["Ag", "Au", "Gd"], a: 1 },
-            { q: "Square root of 144?", options: ["10", "12", "14"], a: 1 },
-            { q: "Painted the Mona Lisa?", options: ["Van Gogh", "Da Vinci", "Picasso"], a: 1 },
-            { q: "Capital of Australia?", options: ["Sydney", "Melbourne", "Canberra"], a: 2 },
-            { q: "5 + 7 x 2 = ?", options: ["19", "24", "26"], a: 0 },
-            { q: "Fastest land animal?", options: ["Cheetah", "Lion", "Leopard"], a: 0 },
-            { q: "How many continents?", options: ["5", "6", "7"], a: 2 },
-            { q: "Water freezes at?", options: ["0°C", "32°C", "100°C"], a: 0 }
+            { q: "What is the only mammal capable of true flight?", options: ["Bat", "Flying Squirrel", "Lemur"], a: 0 },
+            { q: "Which planet is known to have the most moons?", options: ["Saturn", "Jupiter", "Uranus"], a: 0 },
+            { q: "What is the rarest human blood type?", options: ["O Negative", "AB Negative", "B Negative"], a: 1 },
+            { q: "How many hearts does an octopus have?", options: ["One", "Two", "Three"], a: 2 },
+            { q: "Which animal has the longest recorded lifespan?", options: ["Giant Tortoise", "Greenland Shark", "Bowhead Whale"], a: 1 },
+            { q: "What is the primary ingredient in standard glass?", options: ["Sand", "Limestone", "Soda Ash"], a: 0 },
+            { q: "Which country is credited with inventing tea?", options: ["India", "China", "England"], a: 1 },
+            { q: "What is a group of crows called?", options: ["Murder", "Flock", "Gaggle"], a: 0 },
+            { q: "How many bones are in a shark's body?", options: ["Zero", "100", "206"], a: 0 },
+            { q: "What is the hardest known natural substance?", options: ["Gold", "Iron", "Diamond"], a: 2 },
+            { q: "Which is the largest ocean on Earth?", options: ["Atlantic", "Indian", "Pacific"], a: 2 },
+            { q: "Who painted the famous 'Starry Night'?", options: ["Van Gogh", "Da Vinci", "Picasso"], a: 0 },
+            { q: "What is the smallest country in the world?", options: ["Monaco", "Vatican City", "San Marino"], a: 1 },
+            { q: "What element does 'O' represent on the periodic table?", options: ["Osmium", "Oxygen", "Oganesson"], a: 1 },
+            { q: "How many legs does a spider have?", options: ["6", "8", "10"], a: 1 },
+            { q: "In what year did the Apollo 11 sink?", options: ["Wait, it went to space", "1912", "1969"], a: 0 },
+            { q: "Which chess piece can only move diagonally?", options: ["Rook", "Knight", "Pawn"], a: 1 }
         ];
 
         // ==========================================
@@ -344,7 +356,8 @@
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
                     { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun.cloudflare.com:3478' }
+                    { urls: 'stun:stun.cloudflare.com:3478' },
+                    { urls: 'stun:stun.twilio.com:3478' }
                 ]
             }
         };
@@ -431,7 +444,7 @@
                                 id: conn.peer,
                                 name: msg.data.name,
                                 carColor: msg.data.carColor,
-                                x: 0, y: 1.2, z: 0, rotation: 0, lap: 1, progress: 0
+                                x: 0, y: 1.2, z: 0, rotation: 0, lap: 1, progress: 0, score: 1000
                             };
                             broadcastToPlayers({ type: 'lobby_update', players: state.players });
                             updateLobbyUI();
@@ -639,7 +652,8 @@
                     z: physics.z,
                     rotation: physics.rotation,
                     lap: state.myLap,
-                    progress: state.myProgress
+                    progress: state.myProgress,
+                    score: state.myScore
                 }
             });
         };
@@ -668,6 +682,9 @@
                 physics.z = startPoint.z - (startDir.x * offset);
                 physics.rotation = Math.atan2(startDir.x, startDir.z);
                 physics.curveT = 0;
+                
+                state.myScore = 1000;
+                document.getElementById('score-display').innerText = state.myScore;
 
                 if (localVehicleMesh) {
                     localVehicleMesh.position.set(physics.x, physics.y, physics.z);
@@ -715,7 +732,7 @@
 
         const initBots = () => {
             botData.forEach(bot => {
-                bot.active = true; bot.lap = 1; bot.curveT = 0; bot.waitTimer = 0; bot.speedMult = 1.0; bot.passedGates = [];
+                bot.active = true; bot.lap = 1; bot.curveT = 0; bot.waitTimer = 0; bot.speedMult = 1.0; bot.passedGates = []; bot.score = 1000;
                 
                 const pt = trackCurve.getPointAt(0);
                 const dir = trackCurve.getTangentAt(0);
@@ -724,7 +741,7 @@
                 
                 state.players[bot.id] = {
                     name: bot.name, carColor: bot.color, x: x, y: 1.2, z: z,
-                    rotation: Math.atan2(dir.x, dir.z), lap: 1, progress: 0
+                    rotation: Math.atan2(dir.x, dir.z), lap: 1, progress: 0, score: 1000
                 };
             });
         };
@@ -1201,7 +1218,7 @@
                 state.players[bot.id] = {
                     name: bot.name, carColor: bot.color,
                     x: x, y: y, z: z, rotation: rotation,
-                    lap: bot.lap, progress: (bot.lap * 10) + bot.curveT
+                    lap: bot.lap, progress: (bot.lap * 10) + bot.curveT, score: bot.score
                 };
 
                 updateRemotePlayerMesh(bot.id, state.players[bot.id]);
@@ -1333,6 +1350,10 @@
                 physics.boostTimer--;
             }
 
+            if (physics.bumpCooldown > 0) {
+                physics.bumpCooldown--;
+            }
+
             if (inputs.jump && physics.y <= physics.groundY + 0.1) {
                 physics.vy = 0.6; 
             }
@@ -1371,7 +1392,7 @@
             physics.x += Math.sin(physics.rotation) * physics.speed;
             physics.z += Math.cos(physics.rotation) * physics.speed;
 
-            const checkCollision = (cx, cz, radius, objHeight) => {
+            const checkStaticCollision = (cx, cz, radius, objHeight) => {
                 if (physics.y > objHeight) return;
 
                 let dx = physics.x - cx;
@@ -1388,11 +1409,49 @@
                 }
             };
 
-            for(let c of colliders) checkCollision(c.x, c.z, c.radius, c.h);
+            const checkCarCollision = (cx, cz) => {
+                if (physics.y > 5.0) return; // Prevent collision if way above the other car
+                let dx = physics.x - cx;
+                let dz = physics.z - cz;
+                let dist = Math.hypot(dx, dz);
+                
+                if (dist < 4.5) { // Threshold for car bump
+                    let overlap = 4.5 - dist;
+                    let nx = dx / dist;
+                    let nz = dz / dist;
+                    physics.x += nx * overlap;
+                    physics.z += nz * overlap;
+
+                    if (physics.bumpCooldown <= 0) {
+                        // Fun physics bounce
+                        physics.speed *= -0.8; 
+                        physics.vy = 0.8; // Pop into the air
+                        physics.rotation += (Math.random() > 0.5 ? 1 : -1) * 1.5; // Spin out
+                        
+                        // Deduct score
+                        state.myScore = Math.max(0, state.myScore - 50);
+                        document.getElementById('score-display').innerText = state.myScore;
+                        physics.bumpCooldown = 60; // Approx 1 second cooldown
+                        
+                        // Flash score UI
+                        const scEl = document.getElementById('score-display');
+                        if (scEl) {
+                            scEl.style.color = '#ef4444';
+                            scEl.style.transform = 'scale(1.5)';
+                            setTimeout(() => {
+                                scEl.style.color = '';
+                                scEl.style.transform = 'scale(1)';
+                            }, 300);
+                        }
+                    }
+                }
+            };
+
+            for(let c of colliders) checkStaticCollision(c.x, c.z, c.radius, c.h);
             
             for(let id in remoteVehicleMeshes) {
                 const rm = remoteVehicleMeshes[id];
-                checkCollision(rm.position.x, rm.position.z, 2.5, 5.0); 
+                checkCarCollision(rm.position.x, rm.position.z); 
             }
 
             localVehicleMesh.position.set(physics.x, physics.y, physics.z);
@@ -1534,7 +1593,7 @@
 
             let sortedPlayers = [];
             if(state.role === 'player') {
-                sortedPlayers.push({ name: state.userName, progress: state.myProgress, lap: state.myLap, me: true });
+                sortedPlayers.push({ name: state.userName, progress: state.myProgress, lap: state.myLap, score: state.myScore, me: true });
             }
             
             for (let id in state.players) {
@@ -1543,6 +1602,7 @@
                     name: state.players[id].name, 
                     progress: state.players[id].progress || 0,
                     lap: state.players[id].lap || 1,
+                    score: state.players[id].score || 1000,
                     me: false 
                 });
             }
@@ -1555,7 +1615,7 @@
             sortedPlayers.forEach((p, idx) => {
                 const li = document.createElement('li');
                 li.className = p.me ? "text-green-400 font-bold" : "text-white";
-                li.innerText = `${idx+1}. ${p.name.substring(0,8)} (L${Math.min(p.lap,3)})`;
+                li.innerText = `${idx+1}. ${p.name.substring(0,8)} (L${Math.min(p.lap,3)}) | ${p.score}pts`;
                 if(listEl) listEl.appendChild(li);
                 
                 if (p.me && state.role === 'player') {
@@ -1571,6 +1631,8 @@
             physics.speed = 0;
             
             document.getElementById('final-time').innerText = finalRaceTimeStr;
+            document.getElementById('final-score').innerText = state.myScore;
+            
             document.getElementById('global-timer').style.display = 'none';
             document.getElementById('player-stats').style.display = 'none';
             document.getElementById('mobile-controls').style.display = 'none';
