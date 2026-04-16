@@ -14,6 +14,9 @@
     <!-- QRCode.js for lobby sharing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
+    <!-- PeerJS for P2P Multiplayer -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 
     <style>
@@ -100,7 +103,7 @@
         <!-- Main Menu -->
         <div id="main-menu" class="retro-panel p-6 max-w-md w-full pointer-events-auto text-center mx-4">
             <h1 class="text-3xl text-yellow-300 mb-2 pixel-font leading-relaxed drop-shadow-[4px_4px_0_rgba(0,0,0,1)]">EDUKART</h1>
-            <p class="text-[10px] text-gray-300 mb-6 pixel-font tracking-widest">MONSTER TRUCKS</p>
+            <p class="text-[10px] text-gray-300 mb-6 pixel-font tracking-widest">MONSTER TRUCKS (P2P)</p>
             
             <div class="mb-4 text-left">
                 <label class="block text-xs mb-2 pixel-font text-gray-300">RACER NAME</label>
@@ -122,7 +125,7 @@
                 <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>ARROWS TO STEER<br>SPACEBAR TO JUMP!<br>A-Z FOR STORM MODE!</p>
             </div>
 
-            <div id="loading-msg" class="text-yellow-400 mb-4 pixel-font text-xs animate-pulse">CONNECTING TO SERVER...</div>
+            <div id="loading-msg" class="text-yellow-400 mb-4 pixel-font text-xs animate-pulse">INITIALIZING P2P ENGINE...</div>
 
             <div id="action-buttons" class="space-y-4 hidden mt-4">
                 
@@ -234,17 +237,12 @@
         </div>
     </div>
 
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
+    <!-- Game Logic Scripts -->
+    <script>
         // ==========================================
         // 1. GAME STATE & GLOBALS
         // ==========================================
         const state = {
-            userId: null,
             sessionId: null, 
             userName: "PLAYER" + Math.floor(Math.random() * 99),
             carColor: "#EF4444",
@@ -289,6 +287,11 @@
         let lastSyncTime = 0;
         const SYNC_RATE = 70; 
 
+        // P2P Setup variables
+        let peer = null;
+        let hostConn = null; // Defined for players connecting to a host
+        let clientConns = {}; // Defined for host managing connected players
+
         let scene, camera, renderer, trackCurve;
         let trackCurvePoints = []; 
         let localVehicleMesh = null;
@@ -308,10 +311,6 @@
             { id: 'bot_behemoth', name: 'BEHEMOTH', color: '#A855F7', offset: 0, baseSpeed: 0.00041, active: false, curveT: 0, lap: 1, waitTimer: 0, speedMult: 1.0, passedGates: [] }
         ];
 
-        let db, auth;
-        let unsubscribePlayers = null;
-        let unsubscribeGame = null;
-
         const triviaQuestions = [
             { q: "Powerhouse of the cell?", options: ["Nucleus", "Mitochondria", "Ribosome"], a: 1 },
             { q: "12 x 8 = ?", options: ["84", "96", "108"], a: 1 },
@@ -323,43 +322,12 @@
         ];
 
         // ==========================================
-        // 2. FIREBASE INIT
+        // 2. INITIALIZE LOCAL UI
         // ==========================================
-        const initFirebase = async () => {
-            try {
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
-                const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-                if (!firebaseConfig) throw new Error("No database config found.");
-
-                const app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-                
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        state.userId = user.uid;
-                        state.sessionId = user.uid + '_' + Math.random().toString(36).substr(2, 5);
-                        document.getElementById('loading-msg').style.display = 'none';
-                        document.getElementById('action-buttons').classList.remove('hidden');
-                        checkUrlForGame();
-                    }
-                });
-            } catch (err) {
-                console.log("Firebase init bypassed. Operating in local mode.");
-                document.getElementById('loading-msg').innerText = "LOCAL MODE ONLY";
-                state.userId = "local_" + Math.floor(Math.random()*1000);
-                state.sessionId = state.userId;
-                
-                document.getElementById('action-buttons').classList.remove('hidden');
-                document.getElementById('btn-join').parentElement.style.display = 'none';
-                document.getElementById('btn-create').style.display = 'none';
-            }
+        const initNetworkUI = () => {
+            document.getElementById('loading-msg').style.display = 'none';
+            document.getElementById('action-buttons').classList.remove('hidden');
+            checkUrlForGame();
         };
 
         // ==========================================
@@ -384,26 +352,66 @@
             initStartSequence();
         });
 
-        document.getElementById('btn-create').addEventListener('click', async () => {
-            if (!auth || !db) return;
+        // HOST FLOW
+        document.getElementById('btn-create').addEventListener('click', () => {
             state.gameMode = 'multi';
             const code = Math.random().toString(36).substring(2, 6).toUpperCase();
             state.gameId = code;
             state.role = 'host';
             
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
-            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'EduKartGames', code);
-            await setDoc(gameRef, { status: 'lobby', createdAt: new Date().getTime() });
-            
-            joinLobby(code);
+            document.getElementById('action-buttons').classList.add('hidden');
+            document.getElementById('loading-msg').innerText = "CREATING SECURE P2P LOBBY...";
+            document.getElementById('loading-msg').style.display = 'block';
+
+            peer = new Peer('edukart-' + code);
+
+            peer.on('open', (id) => {
+                document.getElementById('loading-msg').style.display = 'none';
+                joinLobby(code);
+            });
+
+            peer.on('connection', (conn) => {
+                clientConns[conn.peer] = conn;
+
+                conn.on('data', (msg) => {
+                    if (msg.type === 'join') {
+                        state.players[conn.peer] = {
+                            id: conn.peer,
+                            name: msg.data.name,
+                            carColor: msg.data.carColor,
+                            x: 0, y: 1.2, z: 0, rotation: 0, lap: 1, progress: 0
+                        };
+                        broadcastToPlayers({ type: 'lobby_update', players: state.players });
+                        updateLobbyUI();
+                    }
+                    if (msg.type === 'update') {
+                        if(state.players[conn.peer]) {
+                            Object.assign(state.players[conn.peer], msg.data);
+                        }
+                    }
+                });
+
+                conn.on('close', () => {
+                    delete state.players[conn.peer];
+                    delete clientConns[conn.peer];
+                    broadcastToPlayers({ type: 'lobby_update', players: state.players });
+                    updateLobbyUI();
+                });
+            });
+
+            peer.on('error', (err) => {
+                alert("P2P Error: " + err.type);
+                window.location.reload();
+            });
         });
 
+        // PLAYER FLOW
         document.getElementById('btn-join').addEventListener('click', () => {
             state.gameMode = 'multi';
             const code = document.getElementById('join-code').value.trim().toUpperCase();
             if (code) {
                 state.role = 'player';
-                joinLobby(code);
+                connectToHost(code);
             }
         });
 
@@ -414,11 +422,65 @@
                 state.gameMode = 'multi';
                 document.getElementById('join-code').value = gameCode;
                 state.role = 'player';
-                joinLobby(gameCode.toUpperCase());
+                connectToHost(gameCode.toUpperCase());
             }
         };
 
-        const joinLobby = async (code) => {
+        const connectToHost = (code) => {
+            document.getElementById('action-buttons').classList.add('hidden');
+            document.getElementById('loading-msg').innerText = "CONNECTING DIRECTLY TO HOST...";
+            document.getElementById('loading-msg').style.display = 'block';
+
+            peer = new Peer();
+            
+            peer.on('open', (id) => {
+                state.sessionId = id;
+                hostConn = peer.connect('edukart-' + code);
+
+                hostConn.on('open', () => {
+                    document.getElementById('loading-msg').style.display = 'none';
+                    joinLobby(code);
+                    
+                    hostConn.send({
+                        type: 'join',
+                        data: { name: state.userName, carColor: state.carColor }
+                    });
+                });
+
+                hostConn.on('data', (msg) => {
+                    if (msg.type === 'lobby_update' || msg.type === 'state_sync') {
+                        state.players = msg.players;
+                        
+                        if (state.gameState === 'menu') {
+                            updateLobbyUI();
+                        }
+
+                        if (state.gameState === 'playing' || state.gameState === 'countdown') {
+                            for (let pid in state.players) {
+                                if (pid !== state.sessionId) {
+                                    updateRemotePlayerMesh(pid, state.players[pid]);
+                                }
+                            }
+                        }
+                    }
+                    if (msg.type === 'status' && msg.status === 'countdown') {
+                        if (state.gameState === 'menu') initStartSequence();
+                    }
+                });
+
+                hostConn.on('close', () => {
+                    alert("Host disconnected.");
+                    window.location.reload();
+                });
+            });
+
+            peer.on('error', (err) => {
+                alert("Connection failed: Check the Room Code!");
+                window.location.reload();
+            });
+        };
+
+        const joinLobby = (code) => {
             state.gameId = code;
             document.getElementById('main-menu').style.display = 'none';
             document.getElementById('lobby-menu').classList.remove('hidden');
@@ -432,80 +494,49 @@
                 document.getElementById('btn-start').classList.remove('hidden');
                 document.getElementById('waiting-host-msg').style.display = 'none';
                 
-                document.getElementById('btn-start').addEventListener('click', async () => {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
-                    const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'EduKartGames', code);
-                    await updateDoc(gameRef, { status: 'countdown' }); 
+                document.getElementById('btn-start').addEventListener('click', () => {
+                    broadcastToPlayers({ type: 'status', status: 'countdown' });
+                    initStartSequence();
                 });
             }
-
-            setupNetworkListeners();
-            if (state.role === 'player') syncPlayerState(); 
         };
 
-        const setupNetworkListeners = () => {
-            if (!db || !state.userId || state.gameMode === 'single') return;
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
-            
-            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'EduKartGames', state.gameId);
-            unsubscribeGame = onSnapshot(gameRef, (snap) => {
-                if (snap.exists()) {
-                    const data = snap.data();
-                    if (data.status === 'countdown' && state.gameState === 'menu') {
-                        initStartSequence();
-                    }
+        const updateLobbyUI = () => {
+            const lobbyList = document.getElementById('lobby-player-list');
+            if(lobbyList) {
+                lobbyList.innerHTML = "";
+                for(let id in state.players) {
+                    const data = state.players[id];
+                    const li = document.createElement('li');
+                    li.innerHTML = `<span style="display:inline-block; width:12px; height:12px; background-color:${data.carColor}; border:1px solid white;"></span> ${data.name}`;
+                    li.className = "border-b border-gray-700 pb-1";
+                    lobbyList.appendChild(li);
                 }
-            }, (err) => console.error(err));
-
-            const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'EduKartPlayers');
-            unsubscribePlayers = onSnapshot(playersCol, (snapshot) => {
-                const lobbyList = document.getElementById('lobby-player-list');
-                if(lobbyList && state.gameState === 'menu') lobbyList.innerHTML = "";
-                
-                snapshot.forEach(docSnap => {
-                    const data = docSnap.data();
-                    if (data.gameId === state.gameId) {
-                        state.players[docSnap.id] = data; 
-                        
-                        if (state.gameState === 'menu' && lobbyList) {
-                            const li = document.createElement('li');
-                            li.innerHTML = `<span style="display:inline-block; width:12px; height:12px; background-color:${data.carColor}; border:1px solid white;"></span> ${data.name}`;
-                            li.className = "border-b border-gray-700 pb-1";
-                            lobbyList.appendChild(li);
-                        }
-
-                        if (state.gameState === 'playing' || state.gameState === 'countdown') {
-                            if (state.role === 'host' || docSnap.id !== state.sessionId) {
-                                updateRemotePlayerMesh(docSnap.id, data);
-                            }
-                        }
-                    }
-                });
-                
-                if (state.gameState === 'playing') updateLeaderboardHUD();
-
-            }, (err) => console.error(err));
+            }
         };
 
-        const syncPlayerState = async () => {
-            if (!db || !state.sessionId || state.gameState === 'finished' || state.role !== 'player' || state.gameMode === 'single') return;
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
-            const playerRef = doc(db, 'artifacts', appId, 'public', 'data', 'EduKartPlayers', state.sessionId);
+        const broadcastToPlayers = (data) => {
+            for(let id in clientConns) {
+                if(clientConns[id].open) {
+                    clientConns[id].send(data);
+                }
+            }
+        };
+
+        const syncPlayerState = () => {
+            if (!hostConn || !hostConn.open || state.gameState === 'finished' || state.role !== 'player' || state.gameMode === 'single') return;
             
-            try {
-                await setDoc(playerRef, {
-                    gameId: state.gameId,
-                    name: state.userName,
-                    carColor: state.carColor,
+            hostConn.send({
+                type: 'update',
+                data: {
                     x: physics.x,
                     y: physics.y,
                     z: physics.z,
                     rotation: physics.rotation,
                     lap: state.myLap,
-                    progress: state.myProgress,
-                    timestamp: new Date().getTime()
-                }, { merge: true });
-            } catch(e) {}
+                    progress: state.myProgress
+                }
+            });
         };
 
         // ==========================================
@@ -960,6 +991,12 @@
                 }
             } 
             
+            // HOST LOGIC: Broadcast state to everyone continuously
+            if (state.role === 'host' && now - lastSyncTime > SYNC_RATE) {
+                broadcastToPlayers({ type: 'state_sync', players: state.players });
+                lastSyncTime = now;
+            }
+
             if (state.gameMode === 'single') {
                 updateBots();
             }
@@ -1368,7 +1405,7 @@
             startConfetti();
         };
 
-        window.onload = initFirebase;
+        window.onload = initNetworkUI;
 
     </script>
 </body>
