@@ -70,6 +70,12 @@
             50% { transform: translateY(-20px) scale(1.1); color: #fff; }
         }
         .winner-anim { animation: bounceWinner 0.8s infinite ease-in-out; }
+
+        /* Mobile specific adjustments to declutter screen */
+        @media (max-width: 768px) {
+            .ctrl-btn { width: 55px; height: 55px; font-size: 14px !important; border-width: 3px; box-shadow: 2px 2px 0px rgba(0,0,0,0.8); }
+            #mobile-controls { bottom: 15px; }
+        }
     </style>
 </head>
 <body>
@@ -80,7 +86,7 @@
 
     <div id="ui-layer" class="flex items-center justify-center">
         
-        <div id="global-timer" class="absolute top-4 w-full text-center text-4xl text-yellow-300 pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,1)] hidden z-50">00:00.0</div>
+        <div id="global-timer" class="absolute top-2 md:top-4 w-full text-center text-2xl md:text-4xl text-yellow-300 pixel-font drop-shadow-[2px_2px_0_rgba(0,0,0,1)] md:drop-shadow-[4px_4px_0_rgba(0,0,0,1)] hidden z-50">00:00.0</div>
 
         <!-- Main Menu -->
         <div id="main-menu" class="retro-panel p-6 max-w-md w-full pointer-events-auto text-center mx-4">
@@ -104,7 +110,7 @@
 
             <div class="mb-4 bg-black/50 p-3 border border-white">
                 <p class="text-[10px] text-yellow-400 pixel-font leading-loose text-center">🏆 FIRST TO 3 LAPS WINS!</p>
-                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>WASD / ARROWS / TILT TO STEER<br>SPACEBAR TO JUMP!</p>
+                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>WASD / ARROWS / ON-SCREEN BUTTONS<br>SPACEBAR TO JUMP!</p>
             </div>
 
             <div id="loading-msg" class="text-yellow-400 mb-4 pixel-font text-xs animate-pulse">INITIALIZING SYSTEMS...</div>
@@ -180,20 +186,28 @@
         </div>
 
         <!-- In-Game HUD -->
-        <div id="hud" class="absolute top-0 left-0 w-full p-4 pointer-events-none hidden flex justify-between items-start mt-10">
-            <div id="player-stats" class="bg-black/90 border-4 border-white p-4 hidden shadow-[4px_4px_0_rgba(0,0,0,1)]">
-                <div class="text-[10px] text-gray-400 pixel-font mb-2">LAP (WIN ON 3)</div>
-                <div class="text-2xl text-white pixel-font mb-4"><span id="lap-counter" class="text-green-400">1</span>/3</div>
-                <div class="text-[10px] text-gray-400 pixel-font mb-2">SPEED</div>
-                <div class="text-xl text-yellow-400 pixel-font" id="speed-display">0</div>
-                <div id="status-msg" class="text-[10px] text-green-400 mt-3 opacity-0 pixel-font font-bold">BOOST ACTIVE!</div>
+        <div id="hud" class="absolute top-0 left-0 w-full p-2 md:p-4 pointer-events-none hidden flex justify-between items-start mt-8 md:mt-10">
+            <div id="player-stats" class="bg-black/90 border-2 md:border-4 border-white p-2 md:p-4 hidden shadow-[2px_2px_0_rgba(0,0,0,1)] md:shadow-[4px_4px_0_rgba(0,0,0,1)] max-w-[120px] md:max-w-none">
+                <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1 md:mb-2">LAP</div>
+                <div class="text-lg md:text-2xl text-white pixel-font mb-2 md:mb-4"><span id="lap-counter" class="text-green-400">1</span>/3</div>
+                <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1 md:mb-2">SPEED</div>
+                <div class="text-sm md:text-xl text-yellow-400 pixel-font" id="speed-display">0</div>
+                <div id="status-msg" class="text-[8px] md:text-[10px] text-green-400 mt-2 md:mt-3 opacity-0 pixel-font font-bold">BOOST ACTIVE!</div>
             </div>
             
-            <div class="bg-black/90 border-4 border-white p-3 w-64 text-right ml-auto shadow-[4px_4px_0_rgba(0,0,0,1)]">
-                <div class="text-xs text-yellow-300 pixel-font border-b-2 border-gray-600 pb-2 mb-3 text-center">STANDINGS</div>
-                <ul id="live-leaderboard" class="space-y-4 text-[10px] md:text-xs pixel-font text-left">
-                    <!-- Populated by JS -->
-                </ul>
+            <div class="flex flex-col items-end space-y-2 pointer-events-auto">
+                <div class="bg-black/90 border-2 md:border-4 border-white p-2 md:p-3 w-32 md:w-64 text-right shadow-[2px_2px_0_rgba(0,0,0,1)] md:shadow-[4px_4px_0_rgba(0,0,0,1)]">
+                    <div class="text-[8px] md:text-xs text-yellow-300 pixel-font border-b border-gray-600 pb-1 md:pb-2 mb-2 md:mb-3 text-center">STANDINGS</div>
+                    <ul id="live-leaderboard" class="space-y-2 md:space-y-4 text-[8px] md:text-xs pixel-font text-left">
+                        <!-- Populated by JS -->
+                    </ul>
+                </div>
+
+                <!-- Storm Summoner HUD -->
+                <div id="weather-hud" class="bg-black/90 border-2 border-white p-2 w-32 md:w-48 text-right shadow-[2px_2px_0_rgba(0,0,0,1)]">
+                    <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1">WEATHER</div>
+                    <div id="weather-status" class="text-sm md:text-lg text-yellow-400 pixel-font font-bold">SUNNY</div>
+                </div>
             </div>
         </div>
         
@@ -208,17 +222,14 @@
 
     <!-- Mobile Controls -->
     <div id="mobile-controls">
-        <div class="absolute w-full top-[-40px] text-center pointer-events-none">
-            <span class="bg-black/80 text-white pixel-font text-[10px] px-3 py-2 rounded border-2 border-white drop-shadow-md">USE BUTTONS OR TILT</span>
-        </div>
         <div class="absolute left-4 bottom-4 flex space-x-2">
             <div class="ctrl-btn" id="btn-left">&lt;</div>
             <div class="ctrl-btn" id="btn-right">&gt;</div>
         </div>
         <div class="absolute right-4 bottom-4 flex space-x-2">
-            <div class="ctrl-btn" id="btn-brake" style="color:#ff5555; border-color:#ff5555; font-size:16px;">BRK</div>
-            <div class="ctrl-btn" id="btn-jump" style="color:#55ccff; border-color:#55ccff; font-size:14px;">JUMP</div>
-            <div class="ctrl-btn" id="btn-gas" style="color:#55ff55; border-color:#55ff55; font-size:16px;">GAS</div>
+            <div class="ctrl-btn" id="btn-brake" style="color:#ff5555; border-color:#ff5555;">BRK</div>
+            <div class="ctrl-btn" id="btn-jump" style="color:#55ccff; border-color:#55ccff;">JMP</div>
+            <div class="ctrl-btn" id="btn-gas" style="color:#55ff55; border-color:#55ff55;">GAS</div>
         </div>
     </div>
 
@@ -240,7 +251,8 @@
             myProgress: 0,
             hasFinished: false,
             triviaActive: false,
-            currentGateIndex: 0
+            currentGateIndex: 0,
+            weatherIntensity: 0 // 0.0 to 1.0 (A-Z)
         };
 
         let raceStartTime = 0;
@@ -253,8 +265,8 @@
             speed: 0,
             maxSpeed: 1.3,
             acceleration: 0.015, 
-            friction: 0.005,
-            turnSpeed: 0.045, 
+            friction: 0.005, // Dynamic via weather
+            turnSpeed: 0.045, // Dynamic via weather
             boostTimer: 0,
             curveT: 0,
             vy: 0,           
@@ -263,7 +275,6 @@
         };
 
         const inputs = { w: false, s: false, a: false, d: false, jump: false }; 
-        let gyroSteer = 0; 
         
         let lastSyncTime = 0;
         const SYNC_RATE = 80; 
@@ -274,13 +285,17 @@
         let clientConnections = []; 
 
         let scene, camera, renderer, trackCurve;
+        let ambientLight, dirLight;
+        let sunnyColor, typhoonColor;
+        let rainGeo, rainSystem; 
+
         let trackCurvePoints = []; 
         let localVehicleMesh = null;
         const remoteVehicleMeshes = {};
         const gateMeshes = [];
         const colliders = []; 
         
-        // AI Bot Data (For Solo Practice Mode)
+        // AI Bot Data
         const botData = [
             { id: 'bot_titan', name: 'TITAN', color: '#22C55E', offset: 25, baseSpeed: 0.00045, active: false, curveT: 0, lap: 1, waitTimer: 0, speedMult: 1.0, passedGates: [] },
             { id: 'bot_crusher', name: 'CRUSHER', color: '#3B82F6', offset: -25, baseSpeed: 0.00043, active: false, curveT: 0, lap: 1, waitTimer: 0, speedMult: 1.0, passedGates: [] },
@@ -320,54 +335,7 @@
             });
         });
 
-        // ----------------------------------------------------
-        // DEVICE MOTION FOR TILT TO STEER (BULLETPROOFING NAN)
-        // ----------------------------------------------------
-        const requestGyroPermission = async () => {
-            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-                try {
-                    const permission = await DeviceMotionEvent.requestPermission();
-                    if (permission === 'granted') {
-                        window.addEventListener('devicemotion', handleMotion);
-                    } else {
-                        console.warn("Gyro permission denied.");
-                    }
-                } catch(e) { console.error("Gyro permission error:", e); }
-            } else {
-                window.addEventListener('devicemotion', handleMotion);
-            }
-        };
-
-        const handleMotion = (e) => {
-            if(state.role !== 'player') return;
-            let accel = e.accelerationIncludingGravity;
-            if (!accel || typeof accel.x !== 'number' || typeof accel.y !== 'number') return;
-
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-            let ax = isIOS ? -accel.x : accel.x;
-            let ay = isIOS ? -accel.y : accel.y;
-
-            let orientation = (window.screen && window.screen.orientation && window.screen.orientation.angle) || window.orientation || 0;
-            
-            if (orientation === 0 && window.innerWidth > window.innerHeight) {
-                orientation = 90;
-            }
-
-            let tilt = 0;
-            if (orientation === 90) {
-                tilt = ay;
-            } else if (orientation === -90) {
-                tilt = -ay;
-            } else {
-                tilt = -ax;
-            }
-
-            if (Math.abs(tilt) < 1.0) tilt = 0; 
-            gyroSteer = Math.max(-1, Math.min(1, tilt / 5.0)) || 0;
-        };
-
         document.getElementById('btn-single').addEventListener('click', () => {
-            requestGyroPermission();
             state.gameMode = 'single';
             state.role = 'player';
             state.gameId = 'local';
@@ -397,6 +365,11 @@
                         updateLobbyListUI();
                     } else if (data.type === 'update' && state.players[data.id]) {
                         Object.assign(state.players[data.id], data.data);
+                        
+                        // Sync Weather globally if a player adjusts it
+                        if (data.data.weatherIntensity !== undefined) {
+                            state.weatherIntensity = data.data.weatherIntensity;
+                        }
                     }
                 });
                 
@@ -408,7 +381,6 @@
 
         // PLAYER JOINS P2P ROOM
         document.getElementById('btn-join').addEventListener('click', () => {
-            requestGyroPermission();
             state.gameMode = 'multi';
             const code = document.getElementById('join-code').value.trim().toUpperCase();
             if (code) {
@@ -424,7 +396,6 @@
                 state.gameMode = 'multi';
                 document.getElementById('join-code').value = gameCode;
                 state.role = 'player';
-                requestGyroPermission();
                 joinPeer(gameCode.toUpperCase());
             }
         };
@@ -451,6 +422,10 @@
                         }
                         state.gameState = data.gameState;
                         
+                        if (data.weatherIntensity !== undefined) {
+                            state.weatherIntensity = data.weatherIntensity;
+                        }
+
                         for (let id in data.players) {
                             if (!state.players[id] && state.gameState === 'menu') {
                                 state.players[id] = data.players[id];
@@ -506,7 +481,12 @@
             if (state.gameMode === 'single') return;
 
             if (state.role === 'host') {
-                const syncPayload = { type: 'sync', gameState: state.gameState, players: state.players };
+                const syncPayload = { 
+                    type: 'sync', 
+                    gameState: state.gameState, 
+                    players: state.players,
+                    weatherIntensity: state.weatherIntensity 
+                };
                 clientConnections.forEach(conn => {
                     if (conn.open) conn.send(syncPayload);
                 });
@@ -518,7 +498,8 @@
                         name: state.userName, 
                         carColor: state.carColor,
                         x: physics.x, y: physics.y, z: physics.z, rotation: physics.rotation,
-                        lap: state.myLap, progress: state.myProgress
+                        lap: state.myLap, progress: state.myProgress,
+                        weatherIntensity: state.weatherIntensity
                     }
                 });
             }
@@ -555,7 +536,6 @@
                     localVehicleMesh.rotation.y = physics.rotation;
                 }
 
-                // Pre-fill so host doesn't receive undefined coords on spawn
                 state.players[state.sessionId] = {
                     name: state.userName, carColor: state.carColor, progress: 0, lap: 1,
                     x: physics.x, y: physics.y, z: physics.z, rotation: physics.rotation
@@ -672,14 +652,18 @@
         };
 
         // ==========================================
-        // 5. THREE.JS FLAT TRACK ENGINE
+        // 5. THREE.JS FLAT TRACK ENGINE & WEATHER
         // ==========================================
         const init3D = () => {
             const container = document.getElementById('game-canvas');
             
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x6CB4EE); 
-            scene.fog = new THREE.Fog(0x6CB4EE, 40, 400);
+            
+            sunnyColor = new THREE.Color(0x6CB4EE);
+            typhoonColor = new THREE.Color(0x333344);
+            
+            scene.background = sunnyColor.clone();
+            scene.fog = new THREE.Fog(sunnyColor.clone(), 40, 400);
 
             camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 2000);
             
@@ -690,10 +674,10 @@
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             container.appendChild(renderer.domElement);
 
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
             scene.add(ambientLight);
             
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+            dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
             dirLight.position.set(100, 200, 50);
             dirLight.castShadow = true;
             dirLight.shadow.mapSize.width = 1024;
@@ -707,6 +691,7 @@
             scene.add(dirLight);
 
             createRetroEnvironment();
+            createWeather();
             
             if (state.role === 'player') {
                 localVehicleMesh = createMonsterTruck(state.carColor, state.userName, true);
@@ -715,6 +700,65 @@
             
             window.addEventListener('resize', onWindowResize, false);
             setupInputs();
+        };
+
+        const createWeather = () => {
+            rainGeo = new THREE.BufferGeometry();
+            const rainCount = 8000;
+            const positions = new Float32Array(rainCount * 3);
+            for(let i=0;i<rainCount;i++) {
+                positions[i*3] = (Math.random() - 0.5) * 1000; 
+                positions[i*3+1] = Math.random() * 300;       
+                positions[i*3+2] = (Math.random() - 0.5) * 1000; 
+            }
+            rainGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const rainMat = new THREE.PointsMaterial({
+                color: 0xaaaaaa,
+                size: 2.5,
+                transparent: true,
+                opacity: 0.0 // Starts invisible (sunny)
+            });
+            rainSystem = new THREE.Points(rainGeo, rainMat);
+            scene.add(rainSystem);
+        };
+
+        const updateWeather = () => {
+            const w = state.weatherIntensity || 0;
+            
+            scene.background.copy(sunnyColor).lerp(typhoonColor, w);
+            scene.fog.color.copy(sunnyColor).lerp(typhoonColor, w);
+            
+            if (ambientLight) ambientLight.intensity = 0.85 - (w * 0.45);
+            if (dirLight) dirLight.intensity = 0.7 - (w * 0.5);
+
+            const weatherHud = document.getElementById('weather-status');
+            const hudContainer = document.getElementById('weather-hud');
+            
+            if(weatherHud && hudContainer) {
+                hudContainer.style.display = 'block';
+                if(w < 0.2) { weatherHud.innerText = "SUNNY"; weatherHud.style.color = "#FACC15"; }
+                else if(w < 0.6) { weatherHud.innerText = "CLOUDY"; weatherHud.style.color = "#9CA3AF"; }
+                else if(w < 0.9) { weatherHud.innerText = "STORM"; weatherHud.style.color = "#60A5FA"; }
+                else { weatherHud.innerText = "TYPHOON!"; weatherHud.style.color = "#EF4444"; }
+            }
+
+            if(!rainSystem) return;
+            rainSystem.material.opacity = w * 0.8;
+            
+            if (w > 0) {
+                const positions = rainGeo.attributes.position.array;
+                for(let i=0; i<positions.length; i+=3) {
+                    positions[i+1] -= (w * 8.0 + 1.0); // Rain speed down
+                    positions[i] -= (w * 3.0);         // Wind drift left
+                    
+                    if (positions[i+1] < 0) {
+                        positions[i+1] = 300;
+                        positions[i] = (Math.random() - 0.5) * 1000 + (w * 300); // Wind wrap
+                        positions[i+2] = (Math.random() - 0.5) * 1000;
+                    }
+                }
+                rainGeo.attributes.position.needsUpdate = true;
+            }
         };
 
         const createRetroEnvironment = () => {
@@ -915,19 +959,28 @@
         };
 
         // ==========================================
-        // 6. INPUT & CONTROLS
+        // 6. INPUT & CONTROLS (Storm Summoner A-Z)
         // ==========================================
         const setupInputs = () => {
-            if(state.role !== 'player') return;
-            
             document.addEventListener('keydown', (e) => {
+                // Storm Summoner Support (A-Z keys map to Weather Intensity 0.0 - 1.0)
+                if (e.key.length === 1) {
+                    let charCode = e.key.toUpperCase().charCodeAt(0);
+                    if (charCode >= 65 && charCode <= 90) { // A to Z
+                        state.weatherIntensity = (charCode - 65) / 25;
+                    }
+                }
+
+                if(state.role !== 'player') return;
                 if(e.key === 'w' || e.key === 'ArrowUp') inputs.w = true;
                 if(e.key === 's' || e.key === 'ArrowDown') inputs.s = true;
                 if(e.key === 'a' || e.key === 'ArrowLeft') inputs.a = true;
                 if(e.key === 'd' || e.key === 'ArrowRight') inputs.d = true;
                 if(e.key === ' ' || e.code === 'Space') inputs.jump = true;
             });
+            
             document.addEventListener('keyup', (e) => {
+                if(state.role !== 'player') return;
                 if(e.key === 'w' || e.key === 'ArrowUp') inputs.w = false;
                 if(e.key === 's' || e.key === 'ArrowDown') inputs.s = false;
                 if(e.key === 'a' || e.key === 'ArrowLeft') inputs.a = false;
@@ -990,6 +1043,7 @@
             });
 
             updateLeaderboardHUD();
+            updateWeather();
 
             if (state.role === 'host') {
                 renderHostView();
@@ -1001,6 +1055,9 @@
 
         const updateBots = () => {
             if (state.gameState !== 'playing') return;
+
+            const wInt = state.weatherIntensity || 0;
+            const slipperyMulti = 1.0 - (wInt * 0.6); // Bots slow down during storms
 
             botData.forEach(bot => {
                 if (!bot.active) return;
@@ -1014,7 +1071,7 @@
                 if (bot.speedMult > 1.0) bot.speedMult -= 0.005;
                 else bot.speedMult = 1.0;
 
-                bot.curveT += bot.baseSpeed * bot.speedMult;
+                bot.curveT += (bot.baseSpeed * bot.speedMult) * slipperyMulti;
                 
                 if (bot.curveT >= 1.0) {
                     bot.curveT -= 1.0;
@@ -1053,13 +1110,15 @@
             const w = window.innerWidth / 3.5; 
             const h = window.innerHeight / 3.5;
             
-            // Clear entire screen first to prevent black screens for unrendered quadrants
             renderer.setViewport(0, 0, w, h);
             renderer.setScissor(0, 0, w, h);
             renderer.setScissorTest(true);
             renderer.setClearColor(0x000000, 1);
             renderer.clear();
-            renderer.setClearColor(0x6CB4EE, 1);
+            
+            // Restore appropriate background color based on weather
+            const currentSkyColor = sunnyColor.clone().lerp(typhoonColor, state.weatherIntensity || 0);
+            renderer.setClearColor(currentSkyColor, 1);
 
             const pIds = Object.keys(state.players);
             const activeIds = pIds.slice(0, 4);
@@ -1088,7 +1147,6 @@
                         camera.position.set(mesh.position.x + Math.sin(mesh.rotation.y)*-25, mesh.position.y + 15, mesh.position.z + Math.cos(mesh.rotation.y)*-25);
                         camera.lookAt(mesh.position.x, mesh.position.y, mesh.position.z);
                     } else {
-                        // Safe fallback camera if player hasn't loaded coordinates yet
                         const startPt = trackCurve ? trackCurve.getPointAt(0) : new THREE.Vector3(0,0,0);
                         camera.position.set(startPt.x - 25, 15, startPt.z - 25);
                         camera.lookAt(startPt.x, 0, startPt.z);
@@ -1143,6 +1201,12 @@
         const updatePhysics = () => {
             if (state.triviaActive || state.hasFinished) return;
 
+            const wInt = state.weatherIntensity || 0;
+            // Base friction = 0.005. Drops to 0.001 at Typhoon mode (Slippery coasting)
+            const currentFriction = 0.005 - (wInt * 0.004);
+            // Base turnSpeed = 0.045. Drops to 0.02 at Typhoon mode (Sluggish turning)
+            const currentTurnSpeed = 0.045 - (wInt * 0.025);
+
             let currentMaxSpeed = physics.maxSpeed;
             if (physics.boostTimer > 0) {
                 currentMaxSpeed = physics.maxSpeed * 1.5;
@@ -1163,9 +1227,9 @@
             if (inputs.w) physics.speed += physics.acceleration;
             else if (inputs.s) physics.speed -= physics.acceleration * 1.5;
             else {
-                if (physics.speed > 0) physics.speed -= physics.friction;
-                if (physics.speed < 0) physics.speed += physics.friction;
-                if (Math.abs(physics.speed) < physics.friction) physics.speed = 0;
+                if (physics.speed > 0) physics.speed -= currentFriction;
+                if (physics.speed < 0) physics.speed += currentFriction;
+                if (Math.abs(physics.speed) < currentFriction) physics.speed = 0;
             }
 
             if (physics.speed > currentMaxSpeed) physics.speed = currentMaxSpeed;
@@ -1174,15 +1238,17 @@
             let keyTurn = 0;
             if (inputs.a) keyTurn = 1;
             if (inputs.d) keyTurn = -1;
-            let currentTurn = keyTurn !== 0 ? keyTurn : -(gyroSteer || 0);
-
+            
+            // Allow turning without moving forward to aim, but slower
             if (Math.abs(physics.speed) > 0.05) {
                 const turnMod = physics.speed > 0 ? 1 : -1;
-                physics.rotation += physics.turnSpeed * currentTurn * turnMod;
+                physics.rotation += currentTurnSpeed * keyTurn * turnMod;
                 physics.camPan *= 0.8; 
             } else {
-                physics.camPan += currentTurn * 0.05;
+                physics.camPan += keyTurn * 0.05;
                 physics.camPan = Math.max(-1.5, Math.min(1.5, physics.camPan));
+                // Optional: Allow tiny turning while stationary to re-orient
+                physics.rotation += currentTurnSpeed * 0.5 * keyTurn;
             }
 
             if (isNaN(physics.rotation)) physics.rotation = 0;
@@ -1235,8 +1301,11 @@
             
             let currentT = closestIdx / 1000;
             
+            // Reduced off-track penalty during storms (mud)
+            const offTrackFriction = 0.92 + (state.weatherIntensity * 0.05);
+
             if(closestDist > 52 && physics.boostTimer <= 0) {
-                physics.speed *= 0.92; 
+                physics.speed *= offTrackFriction; 
             }
 
             if (physics.curveT > 0.8 && currentT < 0.2) {
@@ -1380,6 +1449,7 @@
             document.getElementById('player-stats').style.display = 'none';
             document.getElementById('mobile-controls').style.display = 'none';
             document.getElementById('labels-layer').style.display = 'none';
+            document.getElementById('weather-hud').style.display = 'none';
             document.getElementById('post-race').classList.remove('hidden');
 
             startConfetti();
