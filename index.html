@@ -307,6 +307,7 @@
         const remoteVehicleMeshes = {};
         const gateMeshes = [];
         const colliders = []; 
+        const activeDebris = []; // Holds metal scrap particles from collisions
         
         // Environment handles for weather
         let ambientLight, dirLight, rainSystem;
@@ -786,6 +787,36 @@
         };
 
         // ==========================================
+        // METAL HAYWIRE PARTICLE SYSTEM
+        // ==========================================
+        const createCollisionSparks = (x, y, z) => {
+            if (!scene) return;
+            const debrisCount = 15 + Math.floor(Math.random() * 10);
+            const mats = [
+                new THREE.MeshBasicMaterial({color: 0xcccccc}), // Silver metal
+                new THREE.MeshBasicMaterial({color: 0xffaa00}), // Spark
+                new THREE.MeshBasicMaterial({color: 0x444444})  // Dark metal
+            ];
+            const geo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+
+            for(let i=0; i<debrisCount; i++) {
+                const mesh = new THREE.Mesh(geo, mats[Math.floor(Math.random() * mats.length)]);
+                mesh.position.set(x + (Math.random()-0.5)*4, y + Math.random()*3, z + (Math.random()-0.5)*4);
+                scene.add(mesh);
+                activeDebris.push({
+                    mesh: mesh,
+                    vx: (Math.random() - 0.5) * 2.0,
+                    vy: Math.random() * 2.0 + 0.5,
+                    vz: (Math.random() - 0.5) * 2.0,
+                    rx: Math.random() * 0.5,
+                    ry: Math.random() * 0.5,
+                    rz: Math.random() * 0.5,
+                    life: 40 + Math.random() * 40
+                });
+            }
+        };
+
+        // ==========================================
         // STORM SUMMONER MECHANIC
         // ==========================================
         const setStormIntensity = (intensity) => {
@@ -997,25 +1028,35 @@
             const group = new THREE.Group();
             
             const mat = new THREE.MeshLambertMaterial({color: colorHex});
-            const darkMat = new THREE.MeshLambertMaterial({color: 0x222222});
-            const windowMat = new THREE.MeshLambertMaterial({color: 0x111111});
-            const suspensionMat = new THREE.MeshLambertMaterial({color: 0xaaaaaa});
+            const darkMat = new THREE.MeshLambertMaterial({color: 0x111111});
+            const windowMat = new THREE.MeshLambertMaterial({color: 0x000000});
+            const silverMat = new THREE.MeshLambertMaterial({color: 0xcccccc});
 
-            const body = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.5, 6), mat); 
-            body.position.y = 1.5; body.castShadow = true;
-            
-            const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.2, 3), windowMat); 
-            cabin.position.set(0, 2.5, -0.5); cabin.castShadow = true;
-            
-            const bed = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.5, 2), darkMat);
-            bed.position.set(0, 1.8, -2); bed.castShadow = true;
-            
-            const axleGeo = new THREE.CylinderGeometry(0.2, 0.2, 5.5);
-            const frontAxle = new THREE.Mesh(axleGeo, suspensionMat); frontAxle.rotation.z = Math.PI/2; frontAxle.position.set(0, 0, 2);
-            const rearAxle = new THREE.Mesh(axleGeo, suspensionMat); rearAxle.rotation.z = Math.PI/2; rearAxle.position.set(0, 0, -2);
+            // Elevated ride height for monster truck look
+            const rideHeight = 3.0;
 
-            const wGeo = new THREE.CylinderGeometry(1.2, 1.2, 1.0, 16);
-            const positions = [[-2.5, 0, 2.0], [2.5, 0, 2.0], [-2.5, 0, -2.0], [2.5, 0, -2.0]];
+            const body = new THREE.Mesh(new THREE.BoxGeometry(4, 2, 7), mat); 
+            body.position.y = rideHeight + 1.5; body.castShadow = true;
+            
+            const cabin = new THREE.Mesh(new THREE.BoxGeometry(3, 1.5, 3.5), windowMat); 
+            cabin.position.set(0, rideHeight + 3.0, -0.5); cabin.castShadow = true;
+            
+            const bed = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.5, 2.5), darkMat);
+            bed.position.set(0, rideHeight + 1.5, -2.25); bed.castShadow = true;
+
+            const grill = new THREE.Mesh(new THREE.BoxGeometry(3, 1.5, 0.2), silverMat);
+            grill.position.set(0, rideHeight + 1.5, 3.5); grill.castShadow = true;
+
+            const exhaustGeo = new THREE.CylinderGeometry(0.3, 0.3, 2);
+            const ex1 = new THREE.Mesh(exhaustGeo, silverMat); ex1.position.set(2.2, rideHeight + 2, -1); ex1.rotation.z = -0.2; ex1.castShadow = true;
+            const ex2 = new THREE.Mesh(exhaustGeo, silverMat); ex2.position.set(-2.2, rideHeight + 2, -1); ex2.rotation.z = 0.2; ex2.castShadow = true;
+            
+            const axleGeo = new THREE.CylinderGeometry(0.3, 0.3, 7.5);
+            const frontAxle = new THREE.Mesh(axleGeo, silverMat); frontAxle.rotation.z = Math.PI/2; frontAxle.position.set(0, 2, 2.5); frontAxle.castShadow = true;
+            const rearAxle = new THREE.Mesh(axleGeo, silverMat); rearAxle.rotation.z = Math.PI/2; rearAxle.position.set(0, 2, -2.5); rearAxle.castShadow = true;
+
+            const wGeo = new THREE.CylinderGeometry(2.0, 2.0, 1.8, 12);
+            const positions = [[-3.5, 2, 2.5], [3.5, 2, 2.5], [-3.5, 2, -2.5], [3.5, 2, -2.5]];
             positions.forEach(pos => {
                 const w = new THREE.Mesh(wGeo, darkMat);
                 w.rotation.z = Math.PI / 2;
@@ -1024,7 +1065,7 @@
                 group.add(w);
             });
 
-            group.add(body, cabin, bed, frontAxle, rearAxle);
+            group.add(body, cabin, bed, grill, ex1, ex2, frontAxle, rearAxle);
             return group;
         };
 
@@ -1165,6 +1206,29 @@
                 rainSystem.geometry.attributes.position.needsUpdate = true;
             } else if (rainSystem) {
                 rainSystem.material.opacity = 0;
+            }
+
+            // Animate Debris Particles from Collisions
+            for (let i = activeDebris.length - 1; i >= 0; i--) {
+                let p = activeDebris[i];
+                p.mesh.position.x += p.vx;
+                p.mesh.position.y += p.vy;
+                p.mesh.position.z += p.vz;
+                p.vy -= 0.05; // gravity
+                p.mesh.rotation.x += p.rx;
+                p.mesh.rotation.y += p.ry;
+                p.mesh.rotation.z += p.rz;
+                p.life--;
+                
+                if (p.mesh.position.y < 0) {
+                    p.mesh.position.y = 0; 
+                    p.vy *= -0.5; // bounce
+                }
+
+                if (p.life <= 0) {
+                    if (scene) scene.remove(p.mesh);
+                    activeDebris.splice(i, 1);
+                }
             }
 
             updateLeaderboardHUD();
@@ -1410,24 +1474,27 @@
             };
 
             const checkCarCollision = (cx, cz) => {
-                if (physics.y > 5.0) return; // Prevent collision if way above the other car
+                if (physics.y > 6.0) return; // Prevent collision if way above the other car
                 let dx = physics.x - cx;
                 let dz = physics.z - cz;
                 let dist = Math.hypot(dx, dz);
                 
-                if (dist < 4.5) { // Threshold for car bump
-                    let overlap = 4.5 - dist;
+                if (dist < 7.5) { // Updated threshold for bigger monster trucks
+                    let overlap = 7.5 - dist;
                     let nx = dx / dist;
                     let nz = dz / dist;
                     physics.x += nx * overlap;
                     physics.z += nz * overlap;
 
                     if (physics.bumpCooldown <= 0) {
-                        // Fun physics bounce
+                        // Fun physics bounce & spinout
                         physics.speed *= -0.8; 
-                        physics.vy = 0.8; // Pop into the air
-                        physics.rotation += (Math.random() > 0.5 ? 1 : -1) * 1.5; // Spin out
+                        physics.vy = 0.8; 
+                        physics.rotation += (Math.random() > 0.5 ? 1 : -1) * 1.5; 
                         
+                        // Emit metal debris
+                        createCollisionSparks(physics.x + (nx * overlap / 2), physics.y + 2, physics.z + (nz * overlap / 2));
+
                         // Deduct score
                         state.myScore = Math.max(0, state.myScore - 50);
                         document.getElementById('score-display').innerText = state.myScore;
