@@ -330,11 +330,37 @@
             checkUrlForGame();
         };
 
+        // WebRTC config with Google's public STUN servers for cross-network (NAT) traversal
+        const peerConfig = {
+            config: {
+                'iceServers': [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' }
+                ]
+            }
+        };
+
+        const filterUsername = (name) => {
+            const badWords = ['FUCK', 'SHIT', 'BITCH', 'CUNT', 'DICK', 'COCK', 'PUSSY', 'WHORE', 'SLUT', 'NIGGER', 'NIGGA', 'PORN', 'SEX'];
+            let cleanName = name;
+            badWords.forEach(word => {
+                const regex = new RegExp(word, 'gi');
+                cleanName = cleanName.replace(regex, '*'.repeat(word.length));
+            });
+            return cleanName;
+        };
+
         // ==========================================
         // 3. UI LOGIC & FLOW
         // ==========================================
         document.getElementById('player-name').value = state.userName;
-        document.getElementById('player-name').addEventListener('change', (e) => state.userName = e.target.value.toUpperCase() || "PLAYER");
+        document.getElementById('player-name').addEventListener('change', (e) => {
+            let val = e.target.value.toUpperCase() || "PLAYER";
+            val = filterUsername(val);
+            e.target.value = val;
+            state.userName = val;
+        });
 
         document.querySelectorAll('.color-option').forEach(el => {
             el.addEventListener('click', () => {
@@ -363,7 +389,8 @@
             document.getElementById('loading-msg').innerText = "CREATING SECURE P2P LOBBY...";
             document.getElementById('loading-msg').style.display = 'block';
 
-            peer = new Peer('edukart-' + code);
+            // Pass the ICE servers config to punch through networks
+            peer = new Peer('edukart-' + code, peerConfig);
 
             peer.on('open', (id) => {
                 document.getElementById('loading-msg').style.display = 'none';
@@ -436,7 +463,8 @@
             document.getElementById('loading-msg').innerText = "CONNECTING DIRECTLY TO HOST...";
             document.getElementById('loading-msg').style.display = 'block';
 
-            peer = new Peer();
+            // Pass the ICE servers config to punch through networks
+            peer = new Peer(peerConfig);
             
             peer.on('open', (id) => {
                 state.sessionId = id;
@@ -552,9 +580,8 @@
             document.getElementById('lobby-menu').style.display = 'none';
             document.getElementById('game-canvas').style.display = 'block';
             
-            if (state.role === 'player') {
-                document.getElementById('labels-layer').style.display = 'block';
-            }
+            // Show labels layer for everyone (including host now)
+            document.getElementById('labels-layer').style.display = 'block';
             
             init3D();
 
@@ -1114,6 +1141,16 @@
                 [w/2, 0, w/2, h/2]        
             ];
 
+            const cssViews = [
+                { top: '2%', left: '2%' },
+                { top: '2%', left: '52%' },
+                { top: '52%', left: '2%' },
+                { top: '52%', left: '52%' }
+            ];
+
+            const labelContainer = document.getElementById('labels-layer');
+            labelContainer.innerHTML = '';
+
             if (activeIds.length > 0) {
                 activeIds.forEach((id, index) => {
                     const mesh = remoteVehicleMeshes[id];
@@ -1128,7 +1165,30 @@
                     camera.position.set(mesh.position.x + Math.sin(mesh.rotation.y)*-25, mesh.position.y + 15, mesh.position.z + Math.cos(mesh.rotation.y)*-25);
                     camera.lookAt(mesh.position.x, mesh.position.y, mesh.position.z);
                     renderer.render(scene, camera);
+
+                    // Add player label for this quadrant
+                    const pData = state.players[id];
+                    const div = document.createElement('div');
+                    div.className = "absolute font-bold text-[10px] md:text-xs pixel-font drop-shadow-[2px_2px_0px_rgba(0,0,0,1)] bg-black/80 px-2 py-1 border-2 rounded z-50 text-white";
+                    div.style.left = cssViews[index].left;
+                    div.style.top = cssViews[index].top;
+                    div.style.borderColor = pData.carColor;
+                    div.innerText = pData.name + " (L" + Math.min(pData.lap, 3) + ")";
+                    labelContainer.appendChild(div);
                 });
+
+                // Add split-screen dividers
+                if (activeIds.length > 1) {
+                    const vLine = document.createElement('div');
+                    vLine.className = "absolute left-1/2 top-0 w-1 h-full bg-white z-40";
+                    labelContainer.appendChild(vLine);
+                }
+                if (activeIds.length > 2) {
+                    const hLine = document.createElement('div');
+                    hLine.className = "absolute top-1/2 left-0 h-1 w-full bg-white z-40";
+                    labelContainer.appendChild(hLine);
+                }
+
             } else {
                 renderer.setViewport(0, 0, w, h);
                 renderer.setScissor(0, 0, w, h);
@@ -1136,10 +1196,14 @@
                 camera.position.set(Math.cos(t)*150, 80, Math.sin(t)*150);
                 camera.lookAt(0,0,0);
                 renderer.render(scene, camera);
+                
+                const div = document.createElement('div');
+                div.className = "absolute top-4 left-1/2 transform -translate-x-1/2 font-bold text-sm pixel-font text-yellow-300 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)] z-50";
+                div.innerText = "WAITING FOR RACERS...";
+                labelContainer.appendChild(div);
             }
 
             renderer.setScissorTest(false);
-            document.getElementById('labels-layer').innerHTML = ''; 
         };
 
         const updateCrispNameLabels = () => {
