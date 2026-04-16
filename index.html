@@ -99,6 +99,8 @@
     <div id="ui-layer" class="flex items-center justify-center">
         
         <div id="global-timer" class="absolute top-2 md:top-4 w-full text-center text-xl md:text-4xl text-yellow-300 pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,1)] hidden z-50">00:00.0</div>
+        
+        <div id="wrong-way-warning" class="absolute top-1/4 w-full text-center text-3xl md:text-5xl text-red-500 pixel-font drop-shadow-[2px_2px_0_rgba(255,255,255,0.8)] z-50 animate-pulse" style="display:none;">WRONG WAY!</div>
 
         <!-- Main Menu -->
         <div id="main-menu" class="retro-panel p-6 max-w-md w-full pointer-events-auto text-center mx-4">
@@ -318,9 +320,16 @@
             { q: "Titanic sank in?", options: ["1905", "1912", "1920"], a: 1 },
             { q: "Chemical symbol for Gold?", options: ["Ag", "Au", "Gd"], a: 1 },
             { q: "Square root of 144?", options: ["10", "12", "14"], a: 1 },
-            { q: "Painted the Mona Lisa?", options: ["Van Gogh", "Da Vinci", "Picasso"], a: 1 }
+            { q: "Painted the Mona Lisa?", options: ["Van Gogh", "Da Vinci", "Picasso"], a: 1 },
+            { q: "Capital of Australia?", options: ["Sydney", "Melbourne", "Canberra"], a: 2 },
+            { q: "5 + 7 x 2 = ?", options: ["19", "24", "26"], a: 0 },
+            { q: "Fastest land animal?", options: ["Cheetah", "Lion", "Leopard"], a: 0 },
+            { q: "How many continents?", options: ["5", "6", "7"], a: 2 },
+            { q: "Water freezes at?", options: ["0°C", "32°C", "100°C"], a: 0 }
         ];
 
+        // ==========================================
+        // 2. INITIALIZE LOCAL UI
         // ==========================================
         // 2. INITIALIZE LOCAL UI
         // ==========================================
@@ -330,28 +339,15 @@
             checkUrlForGame();
         };
 
-        // WebRTC config with STUN and Metered's Free OpenRelay TURN servers for reliable NAT traversal
+        // WebRTC config with highly reliable STUN servers (removed free TURN which causes connection hangs)
         const peerConfig = {
             debug: 2,
             config: {
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:openrelay.metered.ca:80' },
-                    {
-                        urls: 'turn:openrelay.metered.ca:80',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    },
-                    {
-                        urls: 'turn:openrelay.metered.ca:443',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    },
-                    {
-                        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    }
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun.cloudflare.com:3478' },
+                    { urls: 'stun:stun.twilio.com:3478' }
                 ]
             }
         };
@@ -1410,6 +1406,24 @@
             
             if(closestDist > 52 && physics.boostTimer <= 0) {
                 physics.speed *= 0.92; 
+            }
+
+            // Wrong Way Check
+            if (trackCurve) {
+                const tangent = trackCurve.getTangentAt(currentT);
+                const carDirX = Math.sin(physics.rotation);
+                const carDirZ = Math.cos(physics.rotation);
+                const dot = (carDirX * tangent.x) + (carDirZ * tangent.z);
+                
+                const warningEl = document.getElementById('wrong-way-warning');
+                if (warningEl) {
+                    // Dot product < -0.2 means they are facing > 100 degrees away from track direction
+                    if (dot < -0.2 && Math.abs(physics.speed) > 0.05) {
+                        warningEl.style.display = 'block';
+                    } else {
+                        warningEl.style.display = 'none';
+                    }
+                }
             }
 
             if (physics.curveT > 0.8 && currentT < 0.2) {
