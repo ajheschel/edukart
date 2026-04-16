@@ -104,7 +104,7 @@
 
             <div class="mb-4 bg-black/50 p-3 border border-white">
                 <p class="text-[10px] text-yellow-400 pixel-font leading-loose text-center">🏆 FIRST TO 3 LAPS WINS!</p>
-                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>ARROWS / TILT TO STEER<br>SPACEBAR TO JUMP!<br><br><span class="text-blue-400">(A-Z Keys Trigger Storm Summoner)</span></p>
+                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>WASD / ARROWS / TILT TO STEER<br>SPACEBAR TO JUMP!</p>
             </div>
 
             <div id="loading-msg" class="text-yellow-400 mb-4 pixel-font text-xs animate-pulse">INITIALIZING SYSTEMS...</div>
@@ -184,14 +184,8 @@
             <div id="player-stats" class="bg-black/90 border-4 border-white p-4 hidden shadow-[4px_4px_0_rgba(0,0,0,1)]">
                 <div class="text-[10px] text-gray-400 pixel-font mb-2">LAP (WIN ON 3)</div>
                 <div class="text-2xl text-white pixel-font mb-4"><span id="lap-counter" class="text-green-400">1</span>/3</div>
-                
                 <div class="text-[10px] text-gray-400 pixel-font mb-2">SPEED</div>
-                <div class="text-xl text-yellow-400 pixel-font mb-4" id="speed-display">0</div>
-                
-                <!-- Weather HUD Addition -->
-                <div class="text-[10px] text-gray-400 pixel-font mb-2">WEATHER</div>
-                <div class="text-lg text-yellow-300 pixel-font" id="weather-display">SUNNY</div>
-
+                <div class="text-xl text-yellow-400 pixel-font" id="speed-display">0</div>
                 <div id="status-msg" class="text-[10px] text-green-400 mt-3 opacity-0 pixel-font font-bold">BOOST ACTIVE!</div>
             </div>
             
@@ -249,12 +243,6 @@
             currentGateIndex: 0
         };
 
-        // Storm Summoner Sensor State
-        const weather = {
-            level: 0,        // Current interpolated level (0=Sunny, 1=Typhoon)
-            targetLevel: 0   // Value set by A-Z keys
-        };
-
         let raceStartTime = 0;
         let finalRaceTimeStr = "";
 
@@ -265,11 +253,11 @@
             speed: 0,
             maxSpeed: 1.3,
             acceleration: 0.015, 
-            friction: 0.005, // Dynamic based on weather
+            friction: 0.005,
             turnSpeed: 0.045, 
             boostTimer: 0,
             curveT: 0,
-            vy: 0,            
+            vy: 0,           
             groundY: 1.2, 
             gravity: 0.03    
         };
@@ -285,11 +273,7 @@
         let hostConnection = null; 
         let clientConnections = []; 
 
-        // Graphics Globals
         let scene, camera, renderer, trackCurve;
-        let ambientLight, dirLight;
-        let rainSystem, rainGeo, rainVel;
-
         let trackCurvePoints = []; 
         let localVehicleMesh = null;
         const remoteVehicleMeshes = {};
@@ -336,6 +320,9 @@
             });
         });
 
+        // ----------------------------------------------------
+        // DEVICE MOTION FOR TILT TO STEER (BULLETPROOFING NAN)
+        // ----------------------------------------------------
         const requestGyroPermission = async () => {
             if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
                 try {
@@ -354,7 +341,7 @@
         const handleMotion = (e) => {
             if(state.role !== 'player') return;
             let accel = e.accelerationIncludingGravity;
-            if (!accel || accel.x === null) return;
+            if (!accel || typeof accel.x !== 'number' || typeof accel.y !== 'number') return;
 
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             let ax = isIOS ? -accel.x : accel.x;
@@ -376,7 +363,7 @@
             }
 
             if (Math.abs(tilt) < 1.0) tilt = 0; 
-            gyroSteer = Math.max(-1, Math.min(1, tilt / 5.0));
+            gyroSteer = Math.max(-1, Math.min(1, tilt / 5.0)) || 0;
         };
 
         document.getElementById('btn-single').addEventListener('click', () => {
@@ -388,6 +375,7 @@
             initStartSequence();
         });
 
+        // HOST CREATES P2P ROOM
         document.getElementById('btn-create').addEventListener('click', () => {
             state.gameMode = 'multi';
             const code = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -409,10 +397,6 @@
                         updateLobbyListUI();
                     } else if (data.type === 'update' && state.players[data.id]) {
                         Object.assign(state.players[data.id], data.data);
-                        
-                        if (state.gameState === 'playing' || state.gameState === 'countdown') {
-                            updateRemotePlayerMesh(data.id, state.players[data.id]);
-                        }
                     }
                 });
                 
@@ -422,6 +406,7 @@
             });
         });
 
+        // PLAYER JOINS P2P ROOM
         document.getElementById('btn-join').addEventListener('click', () => {
             requestGyroPermission();
             state.gameMode = 'multi';
@@ -472,14 +457,6 @@
                                 updateLobbyListUI(); 
                             } else {
                                 state.players[id] = data.players[id]; 
-                            }
-                        }
-
-                        if (state.gameState === 'playing' || state.gameState === 'countdown') {
-                            for (let id in data.players) {
-                                if (id !== state.sessionId) {
-                                    updateRemotePlayerMesh(id, data.players[id]);
-                                }
                             }
                         }
                     }
@@ -578,8 +555,10 @@
                     localVehicleMesh.rotation.y = physics.rotation;
                 }
 
+                // Pre-fill so host doesn't receive undefined coords on spawn
                 state.players[state.sessionId] = {
-                    name: state.userName, carColor: state.carColor, progress: 0, lap: 1
+                    name: state.userName, carColor: state.carColor, progress: 0, lap: 1,
+                    x: physics.x, y: physics.y, z: physics.z, rotation: physics.rotation
                 };
             }
 
@@ -693,7 +672,7 @@
         };
 
         // ==========================================
-        // 5. THREE.JS FLAT TRACK ENGINE & STORM FX
+        // 5. THREE.JS FLAT TRACK ENGINE
         // ==========================================
         const init3D = () => {
             const container = document.getElementById('game-canvas');
@@ -711,10 +690,10 @@
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             container.appendChild(renderer.domElement);
 
-            ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
             scene.add(ambientLight);
             
-            dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
             dirLight.position.set(100, 200, 50);
             dirLight.castShadow = true;
             dirLight.shadow.mapSize.width = 1024;
@@ -733,28 +712,6 @@
                 localVehicleMesh = createMonsterTruck(state.carColor, state.userName, true);
                 scene.add(localVehicleMesh);
             }
-
-            // Initialize Storm/Rain System
-            rainGeo = new THREE.BufferGeometry();
-            const rainCount = 5000;
-            const rainPos = new Float32Array(rainCount * 3);
-            rainVel = [];
-            for(let i=0; i<rainCount; i++) {
-                rainPos[i*3] = (Math.random() - 0.5) * 400; 
-                rainPos[i*3+1] = Math.random() * 200;       
-                rainPos[i*3+2] = (Math.random() - 0.5) * 400; 
-                rainVel.push(2 + Math.random() * 3); 
-            }
-            rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
-            
-            const rainMat = new THREE.PointsMaterial({
-                color: 0xcccccc,
-                size: 0.6,
-                transparent: true,
-                opacity: 0 // Invisible to start (Sunny)
-            });
-            rainSystem = new THREE.Points(rainGeo, rainMat);
-            scene.add(rainSystem);
             
             window.addEventListener('resize', onWindowResize, false);
             setupInputs();
@@ -935,7 +892,7 @@
         };
 
         const updateRemotePlayerMesh = (id, data) => {
-            if (data.x === undefined) return; 
+            if (data.x === undefined || isNaN(data.x) || isNaN(data.y) || isNaN(data.z) || isNaN(data.rotation)) return; 
             if (!remoteVehicleMeshes[id]) {
                 const mesh = createMonsterTruck(data.carColor);
                 mesh.position.set(data.x, data.y, data.z); 
@@ -964,20 +921,11 @@
             if(state.role !== 'player') return;
             
             document.addEventListener('keydown', (e) => {
-                // Driving Controls
                 if(e.key === 'w' || e.key === 'ArrowUp') inputs.w = true;
                 if(e.key === 's' || e.key === 'ArrowDown') inputs.s = true;
                 if(e.key === 'a' || e.key === 'ArrowLeft') inputs.a = true;
                 if(e.key === 'd' || e.key === 'ArrowRight') inputs.d = true;
                 if(e.key === ' ' || e.code === 'Space') inputs.jump = true;
-
-                // Storm Summoner Sensor (A-Z keys to set weather)
-                if (e.key.length === 1 && e.key.match(/[a-zA-Z]/)) {
-                    let charCode = e.key.toUpperCase().charCodeAt(0);
-                    if (charCode >= 65 && charCode <= 90) { // A = 65 (Sunny), Z = 90 (Typhoon)
-                        weather.targetLevel = (charCode - 65) / 25;
-                    }
-                }
             });
             document.addEventListener('keyup', (e) => {
                 if(e.key === 'w' || e.key === 'ArrowUp') inputs.w = false;
@@ -1002,64 +950,6 @@
         // ==========================================
         // 7. GAME LOOP & LOGIC
         // ==========================================
-        const updateWeatherEffect = () => {
-            if (!scene) return;
-
-            // Smoothly transition between states
-            weather.level += (weather.targetLevel - weather.level) * 0.05;
-            
-            const sunnyColor = new THREE.Color(0x6CB4EE);
-            const stormColor = new THREE.Color(0x444444);
-            
-            // Sky & Fog adjustments
-            scene.background = sunnyColor.clone().lerp(stormColor, weather.level);
-            if (scene.fog) scene.fog.color = sunnyColor.clone().lerp(stormColor, weather.level);
-            
-            // Light dimming
-            if (ambientLight) ambientLight.intensity = 0.6 - (weather.level * 0.4);
-            if (dirLight) dirLight.intensity = 0.7 - (weather.level * 0.6);
-            
-            // Rain Update
-            if (rainSystem && rainGeo && camera) {
-                rainSystem.material.opacity = weather.level * 0.9;
-                
-                const posAttr = rainGeo.attributes.position;
-                const positions = posAttr.array;
-                
-                for(let i=0; i<5000; i++) {
-                    // Rain falls faster in heavy storms
-                    positions[i*3+1] -= rainVel[i] * (0.2 + weather.level * 1.5);
-                    
-                    // Wind pushing rain to the side
-                    positions[i*3] -= 2.0 * weather.level; 
-                    positions[i*3+2] -= 1.0 * weather.level;
-                    
-                    // Reset rain if it hits the ground
-                    if (positions[i*3+1] < 0) {
-                        positions[i*3+1] = 150 + Math.random() * 50;
-                        positions[i*3] = camera.position.x + (Math.random() - 0.5) * 400;
-                        positions[i*3+2] = camera.position.z + (Math.random() - 0.5) * 400;
-                    }
-                }
-                posAttr.needsUpdate = true;
-            }
-
-            // Update UI Weather Text
-            const wDisp = document.getElementById('weather-display');
-            if (wDisp) {
-                if (weather.level > 0.8) {
-                    wDisp.innerText = "TYPHOON!";
-                    wDisp.className = "text-lg text-red-500 pixel-font animate-pulse";
-                } else if (weather.level > 0.4) {
-                    wDisp.innerText = "RAINY";
-                    wDisp.className = "text-lg text-blue-400 pixel-font";
-                } else {
-                    wDisp.innerText = "SUNNY";
-                    wDisp.className = "text-lg text-yellow-300 pixel-font";
-                }
-            }
-        };
-
         const animate = () => {
             requestAnimationFrame(animate);
             if (state.gameState !== 'playing' && state.gameState !== 'countdown') return;
@@ -1072,7 +962,6 @@
                     updateCurveProgressAndGates();
                 }
                 updateCameraPlayer();
-                updateWeatherEffect();
             } 
             
             if (state.gameMode === 'single') {
@@ -1084,7 +973,7 @@
 
             for (let id in remoteVehicleMeshes) {
                 const mesh = remoteVehicleMeshes[id];
-                if (mesh.userData.targetX !== undefined) {
+                if (mesh.userData.targetX !== undefined && !isNaN(mesh.userData.targetX)) {
                     mesh.position.x += (mesh.userData.targetX - mesh.position.x) * 0.2;
                     mesh.position.y += (mesh.userData.targetY - mesh.position.y) * 0.2;
                     mesh.position.z += (mesh.userData.targetZ - mesh.position.z) * 0.2;
@@ -1125,9 +1014,7 @@
                 if (bot.speedMult > 1.0) bot.speedMult -= 0.005;
                 else bot.speedMult = 1.0;
 
-                // Bots slip a bit in the rain too!
-                const botBaseSpeed = bot.baseSpeed * (1.0 - (weather.level * 0.1));
-                bot.curveT += botBaseSpeed * bot.speedMult;
+                bot.curveT += bot.baseSpeed * bot.speedMult;
                 
                 if (bot.curveT >= 1.0) {
                     bot.curveT -= 1.0;
@@ -1165,7 +1052,14 @@
         const renderHostView = () => {
             const w = window.innerWidth / 3.5; 
             const h = window.innerHeight / 3.5;
+            
+            // Clear entire screen first to prevent black screens for unrendered quadrants
+            renderer.setViewport(0, 0, w, h);
+            renderer.setScissor(0, 0, w, h);
             renderer.setScissorTest(true);
+            renderer.setClearColor(0x000000, 1);
+            renderer.clear();
+            renderer.setClearColor(0x6CB4EE, 1);
 
             const pIds = Object.keys(state.players);
             const activeIds = pIds.slice(0, 4);
@@ -1179,17 +1073,27 @@
 
             if (activeIds.length > 0) {
                 activeIds.forEach((id, index) => {
-                    const mesh = remoteVehicleMeshes[id];
-                    if(!mesh) {
-                        updateRemotePlayerMesh(id, state.players[id]);
-                        return;
+                    const data = state.players[id];
+                    let mesh = remoteVehicleMeshes[id];
+                    
+                    if(!mesh && data.x !== undefined && !isNaN(data.x)) {
+                        updateRemotePlayerMesh(id, data);
+                        mesh = remoteVehicleMeshes[id];
                     }
 
                     renderer.setViewport(views[index][0], views[index][1], views[index][2], views[index][3]);
                     renderer.setScissor(views[index][0], views[index][1], views[index][2], views[index][3]);
 
-                    camera.position.set(mesh.position.x + Math.sin(mesh.rotation.y)*-25, mesh.position.y + 15, mesh.position.z + Math.cos(mesh.rotation.y)*-25);
-                    camera.lookAt(mesh.position.x, mesh.position.y, mesh.position.z);
+                    if (mesh && !isNaN(mesh.position.x)) {
+                        camera.position.set(mesh.position.x + Math.sin(mesh.rotation.y)*-25, mesh.position.y + 15, mesh.position.z + Math.cos(mesh.rotation.y)*-25);
+                        camera.lookAt(mesh.position.x, mesh.position.y, mesh.position.z);
+                    } else {
+                        // Safe fallback camera if player hasn't loaded coordinates yet
+                        const startPt = trackCurve ? trackCurve.getPointAt(0) : new THREE.Vector3(0,0,0);
+                        camera.position.set(startPt.x - 25, 15, startPt.z - 25);
+                        camera.lookAt(startPt.x, 0, startPt.z);
+                    }
+                    
                     renderer.render(scene, camera);
                 });
             } else {
@@ -1256,11 +1160,6 @@
                 physics.vy = 0;
             }
 
-            // DYNAMIC FRICTION CALCULATION FOR WEATHER
-            const baseFriction = 0.006;
-            const stormFriction = 0.0005; // Less friction makes stopping/decelerating harder (Slippery)
-            physics.friction = baseFriction - (weather.level * (baseFriction - stormFriction));
-
             if (inputs.w) physics.speed += physics.acceleration;
             else if (inputs.s) physics.speed -= physics.acceleration * 1.5;
             else {
@@ -1275,7 +1174,7 @@
             let keyTurn = 0;
             if (inputs.a) keyTurn = 1;
             if (inputs.d) keyTurn = -1;
-            let currentTurn = keyTurn !== 0 ? keyTurn : -gyroSteer;
+            let currentTurn = keyTurn !== 0 ? keyTurn : -(gyroSteer || 0);
 
             if (Math.abs(physics.speed) > 0.05) {
                 const turnMod = physics.speed > 0 ? 1 : -1;
@@ -1286,8 +1185,14 @@
                 physics.camPan = Math.max(-1.5, Math.min(1.5, physics.camPan));
             }
 
+            if (isNaN(physics.rotation)) physics.rotation = 0;
+
             physics.x += Math.sin(physics.rotation) * physics.speed;
             physics.z += Math.cos(physics.rotation) * physics.speed;
+
+            if (isNaN(physics.x) || isNaN(physics.z)) {
+                physics.x = 0; physics.z = 0; physics.speed = 0;
+            }
 
             const checkCollision = (cx, cz, radius, objHeight) => {
                 if (physics.y > objHeight) return;
@@ -1331,8 +1236,7 @@
             let currentT = closestIdx / 1000;
             
             if(closestDist > 52 && physics.boostTimer <= 0) {
-                // Slower off-road, scaled slightly by slippery weather
-                physics.speed *= 0.92 + (weather.level * 0.05); 
+                physics.speed *= 0.92; 
             }
 
             if (physics.curveT > 0.8 && currentT < 0.2) {
