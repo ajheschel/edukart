@@ -330,27 +330,16 @@
             checkUrlForGame();
         };
 
-        // WebRTC config with Google STUN and Metered's Free OpenRelay TURN servers for NAT traversal
+        // WebRTC config with reliable Google STUN servers for NAT traversal
         const peerConfig = {
+            debug: 2,
             config: {
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:openrelay.metered.ca:80' },
-                    {
-                        urls: 'turn:openrelay.metered.ca:80',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    },
-                    {
-                        urls: 'turn:openrelay.metered.ca:443',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    },
-                    {
-                        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    }
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' }
                 ]
             }
         };
@@ -403,52 +392,65 @@
             document.getElementById('loading-msg').innerText = "CREATING SECURE P2P LOBBY...";
             document.getElementById('loading-msg').style.display = 'block';
 
-            // Pass the ICE servers config to punch through networks
-            peer = new Peer('edukart-' + code, peerConfig);
+            try {
+                // Pass the ICE servers config and force lowercase ID internally
+                peer = new Peer('edukart-' + code.toLowerCase(), peerConfig);
 
-            peer.on('open', (id) => {
-                document.getElementById('loading-msg').style.display = 'none';
-                joinLobby(code);
-            });
-
-            peer.on('connection', (conn) => {
-                clientConns[conn.peer] = conn;
-
-                conn.on('data', (msg) => {
-                    if (msg.type === 'join') {
-                        state.players[conn.peer] = {
-                            id: conn.peer,
-                            name: msg.data.name,
-                            carColor: msg.data.carColor,
-                            x: 0, y: 1.2, z: 0, rotation: 0, lap: 1, progress: 0
-                        };
-                        broadcastToPlayers({ type: 'lobby_update', players: state.players });
-                        updateLobbyUI();
+                let timeout = setTimeout(() => {
+                    if (document.getElementById('loading-msg').style.display !== 'none') {
+                        document.getElementById('loading-msg').innerText = "TIMEOUT: CONNECTION BLOCKED BY NETWORK/ADBLOCKER";
                     }
-                    if (msg.type === 'update') {
-                        if(state.players[conn.peer]) {
-                            Object.assign(state.players[conn.peer], msg.data);
-                            
-                            // Update mesh targets so the host view reflects actual player movement
-                            if (state.gameState === 'playing' || state.gameState === 'countdown') {
-                                updateRemotePlayerMesh(conn.peer, state.players[conn.peer]);
+                }, 10000);
+
+                peer.on('open', (id) => {
+                    clearTimeout(timeout);
+                    document.getElementById('loading-msg').style.display = 'none';
+                    joinLobby(code);
+                });
+
+                peer.on('connection', (conn) => {
+                    clientConns[conn.peer] = conn;
+
+                    conn.on('data', (msg) => {
+                        if (msg.type === 'join') {
+                            state.players[conn.peer] = {
+                                id: conn.peer,
+                                name: msg.data.name,
+                                carColor: msg.data.carColor,
+                                x: 0, y: 1.2, z: 0, rotation: 0, lap: 1, progress: 0
+                            };
+                            broadcastToPlayers({ type: 'lobby_update', players: state.players });
+                            updateLobbyUI();
+                        }
+                        if (msg.type === 'update') {
+                            if(state.players[conn.peer]) {
+                                Object.assign(state.players[conn.peer], msg.data);
+                                
+                                // Update mesh targets so the host view reflects actual player movement
+                                if (state.gameState === 'playing' || state.gameState === 'countdown') {
+                                    updateRemotePlayerMesh(conn.peer, state.players[conn.peer]);
+                                }
                             }
                         }
-                    }
+                    });
+
+                    conn.on('close', () => {
+                        delete state.players[conn.peer];
+                        delete clientConns[conn.peer];
+                        broadcastToPlayers({ type: 'lobby_update', players: state.players });
+                        updateLobbyUI();
+                    });
                 });
 
-                conn.on('close', () => {
-                    delete state.players[conn.peer];
-                    delete clientConns[conn.peer];
-                    broadcastToPlayers({ type: 'lobby_update', players: state.players });
-                    updateLobbyUI();
+                peer.on('error', (err) => {
+                    document.getElementById('loading-msg').innerText = "P2P ERROR: " + err.type;
+                    console.error("PeerJS Error:", err);
                 });
-            });
 
-            peer.on('error', (err) => {
-                alert("P2P Error: " + err.type);
-                window.location.reload();
-            });
+            } catch (e) {
+                document.getElementById('loading-msg').innerText = "BROWSER ERROR: " + e.message;
+                console.error(e);
+            }
         });
 
         // PLAYER FLOW
@@ -477,61 +479,76 @@
             document.getElementById('loading-msg').innerText = "CONNECTING DIRECTLY TO HOST...";
             document.getElementById('loading-msg').style.display = 'block';
 
-            // Pass the ICE servers config to punch through networks
-            peer = new Peer(peerConfig);
-            
-            peer.on('open', (id) => {
-                state.sessionId = id;
-                hostConn = peer.connect('edukart-' + code);
+            try {
+                // Pass the ICE servers config
+                peer = new Peer(peerConfig);
+                
+                let timeout = setTimeout(() => {
+                    if (document.getElementById('loading-msg').style.display !== 'none') {
+                        document.getElementById('loading-msg').innerText = "TIMEOUT: CANNOT REACH SIGNALING SERVER";
+                    }
+                }, 10000);
+                
+                peer.on('open', (id) => {
+                    clearTimeout(timeout);
+                    state.sessionId = id;
+                    // Force lowercase ID to match host
+                    hostConn = peer.connect('edukart-' + code.toLowerCase());
 
-                hostConn.on('open', () => {
-                    document.getElementById('loading-msg').style.display = 'none';
-                    joinLobby(code);
-                    
-                    hostConn.send({
-                        type: 'join',
-                        data: { name: state.userName, carColor: state.carColor }
+                    hostConn.on('open', () => {
+                        document.getElementById('loading-msg').style.display = 'none';
+                        joinLobby(code);
+                        
+                        hostConn.send({
+                            type: 'join',
+                            data: { name: state.userName, carColor: state.carColor }
+                        });
                     });
-                });
 
-                hostConn.on('data', (msg) => {
-                    // Sync incoming game state & weather
-                    if (msg.type === 'lobby_update' || msg.type === 'state_sync') {
-                        state.players = msg.players;
-                        
-                        // Reliable Weather Sync:
-                        // Ensure clients constantly match the host's weather intensity
-                        if (msg.weather !== undefined && msg.weather !== weather.intensity) {
-                            setStormIntensity(msg.weather);
-                        }
-                        
-                        if (state.gameState === 'menu') {
-                            updateLobbyUI();
-                        }
+                    hostConn.on('data', (msg) => {
+                        // Sync incoming game state & weather
+                        if (msg.type === 'lobby_update' || msg.type === 'state_sync') {
+                            state.players = msg.players;
+                            
+                            // Reliable Weather Sync:
+                            // Ensure clients constantly match the host's weather intensity
+                            if (msg.weather !== undefined && msg.weather !== weather.intensity) {
+                                setStormIntensity(msg.weather);
+                            }
+                            
+                            if (state.gameState === 'menu') {
+                                updateLobbyUI();
+                            }
 
-                        if (state.gameState === 'playing' || state.gameState === 'countdown') {
-                            for (let pid in state.players) {
-                                if (pid !== state.sessionId) {
-                                    updateRemotePlayerMesh(pid, state.players[pid]);
+                            if (state.gameState === 'playing' || state.gameState === 'countdown') {
+                                for (let pid in state.players) {
+                                    if (pid !== state.sessionId) {
+                                        updateRemotePlayerMesh(pid, state.players[pid]);
+                                    }
                                 }
                             }
                         }
-                    }
-                    if (msg.type === 'status' && msg.status === 'countdown') {
-                        if (state.gameState === 'menu') initStartSequence();
-                    }
+                        if (msg.type === 'status' && msg.status === 'countdown') {
+                            if (state.gameState === 'menu') initStartSequence();
+                        }
+                    });
+
+                    hostConn.on('close', () => {
+                        alert("Host disconnected.");
+                        window.location.reload();
+                    });
                 });
 
-                hostConn.on('close', () => {
-                    alert("Host disconnected.");
-                    window.location.reload();
+                peer.on('error', (err) => {
+                    document.getElementById('loading-msg').innerText = "CONNECTION FAILED: " + err.type;
+                    console.error("PeerJS Error:", err);
+                    setTimeout(() => window.location.reload(), 4000);
                 });
-            });
 
-            peer.on('error', (err) => {
-                alert("Connection failed: Check the Room Code!");
-                window.location.reload();
-            });
+            } catch (e) {
+                document.getElementById('loading-msg').innerText = "BROWSER ERROR: " + e.message;
+                console.error(e);
+            }
         };
 
         const joinLobby = (code) => {
