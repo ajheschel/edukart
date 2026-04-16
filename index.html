@@ -495,8 +495,15 @@
                 });
 
                 hostConn.on('data', (msg) => {
+                    // Sync incoming game state & weather
                     if (msg.type === 'lobby_update' || msg.type === 'state_sync') {
                         state.players = msg.players;
+                        
+                        // Reliable Weather Sync:
+                        // Ensure clients constantly match the host's weather intensity
+                        if (msg.weather !== undefined && msg.weather !== weather.intensity) {
+                            setStormIntensity(msg.weather);
+                        }
                         
                         if (state.gameState === 'menu') {
                             updateLobbyUI();
@@ -512,9 +519,6 @@
                     }
                     if (msg.type === 'status' && msg.status === 'countdown') {
                         if (state.gameState === 'menu') initStartSequence();
-                    }
-                    if (msg.type === 'weather') {
-                        setStormIntensity(msg.intensity);
                     }
                 });
 
@@ -997,9 +1001,6 @@
                     if(e.keyCode >= 65 && e.keyCode <= 90) {
                         const intensity = (e.keyCode - 65) / 25; // 0 for A, 1 for Z
                         setStormIntensity(intensity);
-                        if (state.role === 'host') {
-                            broadcastToPlayers({ type: 'weather', intensity: intensity });
-                        }
                     }
                 }
             });
@@ -1049,9 +1050,13 @@
                 }
             } 
             
-            // HOST LOGIC: Broadcast state to everyone continuously
+            // HOST LOGIC: Broadcast state & reliable weather sync to everyone continuously
             if (state.role === 'host' && now - lastSyncTime > SYNC_RATE) {
-                broadcastToPlayers({ type: 'state_sync', players: state.players });
+                broadcastToPlayers({ 
+                    type: 'state_sync', 
+                    players: state.players, 
+                    weather: weather.intensity 
+                });
                 lastSyncTime = now;
             }
 
@@ -1167,11 +1172,13 @@
                 [w/2, 0, w/2, h/2]        
             ];
 
+            // Re-anchored quadrant labels to prevent overlap with the timer
+            // Indexes 0 and 1 are the top quadrants. Now anchored to the bottom-right of their respective viewports.
             const cssViews = [
-                { top: '12%', left: '2%' },
-                { top: '12%', left: '52%' },
-                { top: '52%', left: '2%' },
-                { top: '52%', left: '52%' }
+                { bottom: '52%', right: '52%' }, // Top-Left quadrant -> anchored bottom-right
+                { bottom: '52%', right: '2%' },  // Top-Right quadrant -> anchored bottom-right
+                { top: '52%', left: '2%' },      // Bottom-Left quadrant -> anchored top-left
+                { top: '52%', left: '52%' }      // Bottom-Right quadrant -> anchored top-left
             ];
 
             const labelContainer = document.getElementById('labels-layer');
@@ -1196,8 +1203,12 @@
                     const pData = state.players[id];
                     const div = document.createElement('div');
                     div.className = "absolute font-bold text-[10px] md:text-xs pixel-font drop-shadow-[2px_2px_0px_rgba(0,0,0,1)] bg-black/80 px-2 py-1 border-2 rounded z-50 text-white";
-                    div.style.left = cssViews[index].left;
-                    div.style.top = cssViews[index].top;
+                    
+                    if (cssViews[index].top) div.style.top = cssViews[index].top;
+                    if (cssViews[index].bottom) div.style.bottom = cssViews[index].bottom;
+                    if (cssViews[index].left) div.style.left = cssViews[index].left;
+                    if (cssViews[index].right) div.style.right = cssViews[index].right;
+                    
                     div.style.borderColor = pData.carColor;
                     div.innerText = pData.name + " (L" + Math.min(pData.lap, 3) + ")";
                     labelContainer.appendChild(div);
