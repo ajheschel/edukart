@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>EduKart Retro - Monster Truck Racing (P2P)</title>
+    <title>EduKart Retro - Monster Truck Racing</title>
     
     <!-- Tailwind CSS for UI -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -14,14 +14,12 @@
     <!-- QRCode.js for lobby sharing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-    <!-- PeerJS for WebRTC P2P Multiplayer -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; color: white; font-family: 'Courier New', Courier, monospace; touch-action: none; }
         
+        /* Pixelated Canvas Trick properly stretched */
         #game-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: none; }
         #game-canvas canvas { 
             width: 100% !important; 
@@ -34,12 +32,17 @@
         }
         
         #labels-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; overflow: hidden; display: none; }
+        
+        /* Celebration Canvas */
         #confetti-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 40; pointer-events: none; display: none; }
+
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
         .pointer-events-auto { pointer-events: auto; }
         
+        /* Retro Typography */
         h1, h2, h3, .pixel-font { font-family: 'Press Start 2P', 'Courier New', cursive; }
         
+        /* Retro UI Panels */
         .retro-panel { background: #111155; border: 4px solid #ffffff; box-shadow: 8px 8px 0px #000000; color: white; text-transform: uppercase; }
         .retro-btn { background: #cccccc; border: 4px solid #ffffff; border-bottom-color: #555; border-right-color: #555; color: black; font-weight: bold; text-transform: uppercase; cursor: pointer; transition: background 0.1s; }
         .retro-btn:hover { background: #eeeeee; }
@@ -47,9 +50,21 @@
         .retro-btn-blue { background: #3B82F6; color: white; }
         .retro-btn-green { background: #22C55E; color: white; }
         
-        #mobile-controls { display: none; position: absolute; bottom: 30px; width: 100%; height: 100px; z-index: 20; pointer-events: none; }
-        .ctrl-btn { width: 70px; height: 70px; background: rgba(0,0,0,0.6); border: 4px solid #fff; color: white; font-weight: bold; font-size: 20px; display: flex; justify-content: center; align-items: center; pointer-events: auto; user-select: none; font-family: 'Press Start 2P'; border-radius: 50%; box-shadow: 4px 4px 0px rgba(0,0,0,0.8); }
-        .ctrl-btn:active { background: rgba(255,255,255,0.8); color: black; transform: translateY(4px); box-shadow: 0px 0px 0px rgba(0,0,0,0); }
+        /* Mobile Controls - Scaled and transparent to keep screen clear */
+        #mobile-controls { display: none; position: absolute; bottom: 15px; width: 100%; height: 100px; z-index: 20; pointer-events: none; }
+        .ctrl-btn { 
+            width: 55px; height: 55px; 
+            background: rgba(0,0,0,0.3); 
+            border: 2px solid rgba(255,255,255,0.4); 
+            color: white; font-weight: bold; font-size: 12px; 
+            display: flex; justify-content: center; align-items: center; 
+            pointer-events: auto; user-select: none; font-family: 'Press Start 2P'; 
+            border-radius: 50%; box-shadow: 2px 2px 0px rgba(0,0,0,0.5); 
+        }
+        .ctrl-btn:active { background: rgba(255,255,255,0.6); color: black; transform: translateY(2px); box-shadow: none; }
+        @media (min-width: 768px) {
+            .ctrl-btn { width: 70px; height: 70px; background: rgba(0,0,0,0.6); border: 4px solid #fff; font-size: 16px; box-shadow: 4px 4px 0px rgba(0,0,0,0.8); }
+        }
 
         .color-option { height: 50px; border: 4px solid #222; cursor: pointer; transition: all 0.1s; }
         .color-option.selected { border-color: #ffffff; transform: scale(1.1); box-shadow: 0 0 10px rgba(255,255,255,0.8); }
@@ -70,12 +85,6 @@
             50% { transform: translateY(-20px) scale(1.1); color: #fff; }
         }
         .winner-anim { animation: bounceWinner 0.8s infinite ease-in-out; }
-
-        /* Mobile specific adjustments to declutter screen */
-        @media (max-width: 768px) {
-            .ctrl-btn { width: 55px; height: 55px; font-size: 14px !important; border-width: 3px; box-shadow: 2px 2px 0px rgba(0,0,0,0.8); }
-            #mobile-controls { bottom: 15px; }
-        }
     </style>
 </head>
 <body>
@@ -86,12 +95,12 @@
 
     <div id="ui-layer" class="flex items-center justify-center">
         
-        <div id="global-timer" class="absolute top-2 md:top-4 w-full text-center text-2xl md:text-4xl text-yellow-300 pixel-font drop-shadow-[2px_2px_0_rgba(0,0,0,1)] md:drop-shadow-[4px_4px_0_rgba(0,0,0,1)] hidden z-50">00:00.0</div>
+        <div id="global-timer" class="absolute top-2 md:top-4 w-full text-center text-xl md:text-4xl text-yellow-300 pixel-font drop-shadow-[4px_4px_0_rgba(0,0,0,1)] hidden z-50">00:00.0</div>
 
         <!-- Main Menu -->
         <div id="main-menu" class="retro-panel p-6 max-w-md w-full pointer-events-auto text-center mx-4">
             <h1 class="text-3xl text-yellow-300 mb-2 pixel-font leading-relaxed drop-shadow-[4px_4px_0_rgba(0,0,0,1)]">EDUKART</h1>
-            <p class="text-[10px] text-green-400 mb-6 pixel-font tracking-widest border border-green-500 bg-green-900/30 p-1 inline-block">P2P MULTIPLAYER</p>
+            <p class="text-[10px] text-gray-300 mb-6 pixel-font tracking-widest">MONSTER TRUCKS</p>
             
             <div class="mb-4 text-left">
                 <label class="block text-xs mb-2 pixel-font text-gray-300">RACER NAME</label>
@@ -110,18 +119,19 @@
 
             <div class="mb-4 bg-black/50 p-3 border border-white">
                 <p class="text-[10px] text-yellow-400 pixel-font leading-loose text-center">🏆 FIRST TO 3 LAPS WINS!</p>
-                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>ARROW KEYS TO DRIVE<br>A-Z TO CONTROL WEATHER<br>SPACEBAR TO JUMP!</p>
+                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>ARROWS TO STEER<br>SPACEBAR TO JUMP!<br>A-Z FOR STORM MODE!</p>
             </div>
 
-            <div id="loading-msg" class="text-yellow-400 mb-4 pixel-font text-xs animate-pulse">INITIALIZING SYSTEMS...</div>
+            <div id="loading-msg" class="text-yellow-400 mb-4 pixel-font text-xs animate-pulse">CONNECTING TO SERVER...</div>
 
             <div id="action-buttons" class="space-y-4 hidden mt-4">
+                
                 <div class="border-t-2 border-gray-600 pt-4 mb-2">
                     <button id="btn-single" class="w-full retro-btn retro-btn-green py-3 px-4 text-xs pixel-font mb-4">PRACTICE (VS BOTS)</button>
                 </div>
 
                 <div class="border-t-2 border-gray-600 pt-4">
-                    <p class="text-[10px] text-gray-400 pixel-font mb-3">--- P2P MULTIPLAYER ---</p>
+                    <p class="text-[10px] text-gray-400 pixel-font mb-3">--- MULTIPLAYER ---</p>
                     <div class="flex space-x-2 mb-3">
                         <input type="text" id="join-code" class="w-1/2 bg-black border-2 border-white px-2 py-2 text-white focus:outline-none uppercase text-center font-bold tracking-wider pixel-font text-xs" placeholder="ROOM CODE">
                         <button id="btn-join" class="w-1/2 retro-btn py-2 px-2 text-xs pixel-font">JOIN RACE</button>
@@ -155,7 +165,6 @@
 
             <button id="btn-start" class="w-full retro-btn retro-btn-green py-3 px-4 hidden text-xs pixel-font">START RACE NOW</button>
             <p id="waiting-host-msg" class="text-yellow-400 text-[10px] pixel-font animate-pulse mt-2">WAITING FOR HOST TO START...</p>
-            <p id="connection-status" class="text-blue-400 text-[10px] pixel-font mt-2 hidden">CONNECTING TO PEER...</p>
         </div>
 
         <!-- Countdown Stop Light Overlay -->
@@ -185,29 +194,21 @@
             <p class="text-xl text-white font-bold pixel-font text-center mt-4">RECOVERING IN <br><br><span id="penalty-timer" class="text-yellow-300 text-4xl">2</span></p>
         </div>
 
-        <!-- In-Game HUD -->
-        <div id="hud" class="absolute top-0 left-0 w-full p-2 md:p-4 pointer-events-none hidden flex justify-between items-start mt-8 md:mt-10">
-            <div id="player-stats" class="bg-black/90 border-2 md:border-4 border-white p-2 md:p-4 hidden shadow-[2px_2px_0_rgba(0,0,0,1)] md:shadow-[4px_4px_0_rgba(0,0,0,1)] max-w-[120px] md:max-w-none">
-                <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1 md:mb-2">LAP</div>
+        <!-- In-Game HUD - More compact for mobile viewing -->
+        <div id="hud" class="absolute top-0 left-0 w-full p-2 md:p-4 pointer-events-none hidden flex justify-between items-start mt-8 md:mt-2">
+            <div id="player-stats" class="bg-black/60 border-2 md:border-4 border-white p-2 md:p-4 hidden shadow-md">
+                <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1">LAP</div>
                 <div class="text-lg md:text-2xl text-white pixel-font mb-2 md:mb-4"><span id="lap-counter" class="text-green-400">1</span>/3</div>
-                <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1 md:mb-2">SPEED</div>
+                <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1">SPEED</div>
                 <div class="text-sm md:text-xl text-yellow-400 pixel-font" id="speed-display">0</div>
-                <div id="status-msg" class="text-[8px] md:text-[10px] text-green-400 mt-2 md:mt-3 opacity-0 pixel-font font-bold">BOOST ACTIVE!</div>
+                <div id="status-msg" class="text-[8px] md:text-[10px] text-green-400 mt-2 opacity-0 pixel-font font-bold">BOOST ACTIVE!</div>
             </div>
             
-            <div class="flex flex-col items-end space-y-2 pointer-events-auto">
-                <div class="bg-black/90 border-2 md:border-4 border-white p-2 md:p-3 w-32 md:w-64 text-right shadow-[2px_2px_0_rgba(0,0,0,1)] md:shadow-[4px_4px_0_rgba(0,0,0,1)]">
-                    <div class="text-[8px] md:text-xs text-yellow-300 pixel-font border-b border-gray-600 pb-1 md:pb-2 mb-2 md:mb-3 text-center">STANDINGS</div>
-                    <ul id="live-leaderboard" class="space-y-2 md:space-y-4 text-[8px] md:text-xs pixel-font text-left">
-                        <!-- Populated by JS -->
-                    </ul>
-                </div>
-
-                <!-- Storm Summoner HUD -->
-                <div id="weather-hud" class="bg-black/90 border-2 border-white p-2 w-32 md:w-48 text-right shadow-[2px_2px_0_rgba(0,0,0,1)]">
-                    <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1">WEATHER</div>
-                    <div id="weather-status" class="text-sm md:text-lg text-yellow-400 pixel-font font-bold">SUNNY</div>
-                </div>
+            <div class="bg-black/60 border-2 md:border-4 border-white p-2 md:p-3 w-28 md:w-64 text-right ml-auto shadow-md">
+                <div class="text-[8px] md:text-xs text-yellow-300 pixel-font border-b md:border-b-2 border-gray-600 pb-1 md:pb-2 mb-2 text-center">STANDINGS</div>
+                <ul id="live-leaderboard" class="space-y-2 md:space-y-4 text-[8px] md:text-xs pixel-font text-left">
+                    <!-- Populated by JS -->
+                </ul>
             </div>
         </div>
         
@@ -222,24 +223,29 @@
 
     <!-- Mobile Controls -->
     <div id="mobile-controls">
-        <div class="absolute left-4 bottom-4 flex space-x-2">
+        <div class="absolute left-2 md:left-4 bottom-4 flex space-x-2">
             <div class="ctrl-btn" id="btn-left">&lt;</div>
             <div class="ctrl-btn" id="btn-right">&gt;</div>
         </div>
-        <div class="absolute right-4 bottom-4 flex space-x-2">
-            <div class="ctrl-btn" id="btn-brake" style="color:#ff5555; border-color:#ff5555;">BRK</div>
-            <div class="ctrl-btn" id="btn-jump" style="color:#55ccff; border-color:#55ccff;">JMP</div>
-            <div class="ctrl-btn" id="btn-gas" style="color:#55ff55; border-color:#55ff55;">GAS</div>
+        <div class="absolute right-2 md:right-4 bottom-4 flex space-x-2">
+            <div class="ctrl-btn" id="btn-brake" style="color:#ff8888; border-color:#ff8888;">BRK</div>
+            <div class="ctrl-btn" id="btn-jump" style="color:#88ccff; border-color:#88ccff;">JMP</div>
+            <div class="ctrl-btn" id="btn-gas" style="color:#88ff88; border-color:#88ff88;">GAS</div>
         </div>
     </div>
 
-    <!-- MAIN GAME SCRIPT -->
-    <script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
         // ==========================================
         // 1. GAME STATE & GLOBALS
         // ==========================================
         const state = {
-            sessionId: 'P_' + Math.random().toString(36).substr(2, 6).toUpperCase(), 
+            userId: null,
+            sessionId: null, 
             userName: "PLAYER" + Math.floor(Math.random() * 99),
             carColor: "#EF4444",
             gameMode: 'multi', 
@@ -251,8 +257,11 @@
             myProgress: 0,
             hasFinished: false,
             triviaActive: false,
-            currentGateIndex: 0,
-            weatherIntensity: 0 // 0.0 to 1.0 (A-Z)
+            currentGateIndex: 0
+        };
+
+        const weather = {
+            intensity: 0 // 0 = Sunny (A), 1 = Typhoon (Z)
         };
 
         let raceStartTime = 0;
@@ -265,8 +274,9 @@
             speed: 0,
             maxSpeed: 1.3,
             acceleration: 0.015, 
-            friction: 0.005, // Dynamic via weather
-            turnSpeed: 0.045, // Dynamic via weather
+            baseFriction: 0.005,
+            friction: 0.005,
+            turnSpeed: 0.045, 
             boostTimer: 0,
             curveT: 0,
             vy: 0,            
@@ -274,33 +284,33 @@
             gravity: 0.03   
         };
 
-        const inputs = { up: false, down: false, left: false, right: false, jump: false }; 
+        const inputs = { w: false, s: false, a: false, d: false, jump: false }; 
         
         let lastSyncTime = 0;
-        const SYNC_RATE = 80; 
-
-        // PeerJS Network Globals
-        let peer = null;
-        let hostConnection = null; 
-        let clientConnections = []; 
+        const SYNC_RATE = 70; 
 
         let scene, camera, renderer, trackCurve;
-        let ambientLight, dirLight;
-        let sunnyColor, typhoonColor;
-        let rainGeo, rainSystem; 
-
         let trackCurvePoints = []; 
         let localVehicleMesh = null;
         const remoteVehicleMeshes = {};
         const gateMeshes = [];
         const colliders = []; 
         
-        // AI Bot Data
+        // Environment handles for weather
+        let ambientLight, dirLight, rainSystem;
+        const colorSunny = new THREE.Color(0x6CB4EE);
+        const colorStorm = new THREE.Color(0x444455);
+        
+        // AI Bot Data (For Solo Practice Mode)
         const botData = [
             { id: 'bot_titan', name: 'TITAN', color: '#22C55E', offset: 25, baseSpeed: 0.00045, active: false, curveT: 0, lap: 1, waitTimer: 0, speedMult: 1.0, passedGates: [] },
             { id: 'bot_crusher', name: 'CRUSHER', color: '#3B82F6', offset: -25, baseSpeed: 0.00043, active: false, curveT: 0, lap: 1, waitTimer: 0, speedMult: 1.0, passedGates: [] },
             { id: 'bot_behemoth', name: 'BEHEMOTH', color: '#A855F7', offset: 0, baseSpeed: 0.00041, active: false, curveT: 0, lap: 1, waitTimer: 0, speedMult: 1.0, passedGates: [] }
         ];
+
+        let db, auth;
+        let unsubscribePlayers = null;
+        let unsubscribeGame = null;
 
         const triviaQuestions = [
             { q: "Powerhouse of the cell?", options: ["Nucleus", "Mitochondria", "Ribosome"], a: 1 },
@@ -313,33 +323,56 @@
         ];
 
         // ==========================================
-        // 2. NETWORK INIT (PEER JS)
+        // 2. FIREBASE INIT
         // ==========================================
-        const initNetwork = () => {
-            document.getElementById('loading-msg').style.display = 'none';
-            document.getElementById('action-buttons').classList.remove('hidden');
-            checkUrlForGame();
+        const initFirebase = async () => {
+            try {
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
+                const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+                if (!firebaseConfig) throw new Error("No database config found.");
+
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        state.userId = user.uid;
+                        state.sessionId = user.uid + '_' + Math.random().toString(36).substr(2, 5);
+                        document.getElementById('loading-msg').style.display = 'none';
+                        document.getElementById('action-buttons').classList.remove('hidden');
+                        checkUrlForGame();
+                    }
+                });
+            } catch (err) {
+                console.log("Firebase init bypassed. Operating in local mode.");
+                document.getElementById('loading-msg').innerText = "LOCAL MODE ONLY";
+                state.userId = "local_" + Math.floor(Math.random()*1000);
+                state.sessionId = state.userId;
+                
+                document.getElementById('action-buttons').classList.remove('hidden');
+                document.getElementById('btn-join').parentElement.style.display = 'none';
+                document.getElementById('btn-create').style.display = 'none';
+            }
         };
 
         // ==========================================
         // 3. UI LOGIC & FLOW
         // ==========================================
         document.getElementById('player-name').value = state.userName;
-        document.getElementById('player-name').addEventListener('change', (e) => {
-            state.userName = e.target.value.toUpperCase() || "PLAYER";
-            if (state.role === 'player' && hostConnection && hostConnection.open) {
-                hostConnection.send({ type: 'update', id: state.sessionId, data: { name: state.userName, carColor: state.carColor } });
-            }
-        });
+        document.getElementById('player-name').addEventListener('change', (e) => state.userName = e.target.value.toUpperCase() || "PLAYER");
 
         document.querySelectorAll('.color-option').forEach(el => {
             el.addEventListener('click', () => {
                 document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
                 el.classList.add('selected');
                 state.carColor = el.getAttribute('data-color');
-                if (state.role === 'player' && hostConnection && hostConnection.open) {
-                    hostConnection.send({ type: 'update', id: state.sessionId, data: { name: state.userName, carColor: state.carColor } });
-                }
             });
         });
 
@@ -351,66 +384,26 @@
             initStartSequence();
         });
 
-        // HOST CREATES P2P ROOM
-        document.getElementById('btn-create').addEventListener('click', () => {
+        document.getElementById('btn-create').addEventListener('click', async () => {
+            if (!auth || !db) return;
             state.gameMode = 'multi';
             const code = Math.random().toString(36).substring(2, 6).toUpperCase();
             state.gameId = code;
             state.role = 'host';
             
-            peer = new Peer('edukart-' + code, {
-                config: {
-                    'iceServers': [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:global.stun.twilio.com:3478' }
-                    ]
-                }
-            });
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
+            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'EduKartGames', code);
+            await setDoc(gameRef, { status: 'lobby', createdAt: new Date().getTime() });
             
-            peer.on('error', (err) => {
-                console.error("PeerJS Host Error:", err);
-                document.getElementById('waiting-host-msg').innerText = "NETWORK ERROR. PLEASE REFRESH.";
-            });
-
-            peer.on('open', (id) => {
-                joinLobbyUI(code);
-            });
-
-            peer.on('connection', (conn) => {
-                clientConnections.push(conn);
-                
-                conn.on('data', (data) => {
-                    if (data.type === 'join') {
-                        state.players[data.id] = { name: data.name, carColor: data.color, progress: 0, lap: 1 };
-                        updateLobbyListUI();
-                        syncNetworkState(); // Broadcast updated lobby list immediately
-                    } else if (data.type === 'update' && state.players[data.id]) {
-                        Object.assign(state.players[data.id], data.data);
-                        if (state.gameState === 'menu') {
-                            updateLobbyListUI();
-                            syncNetworkState();
-                        }
-                        
-                        // Sync Weather globally if a player adjusts it
-                        if (data.data.weatherIntensity !== undefined) {
-                            state.weatherIntensity = data.data.weatherIntensity;
-                        }
-                    }
-                });
-                
-                conn.on('close', () => {
-                    clientConnections = clientConnections.filter(c => c !== conn);
-                });
-            });
+            joinLobby(code);
         });
 
-        // PLAYER JOINS P2P ROOM
         document.getElementById('btn-join').addEventListener('click', () => {
             state.gameMode = 'multi';
             const code = document.getElementById('join-code').value.trim().toUpperCase();
             if (code) {
                 state.role = 'player';
-                joinPeer(code);
+                joinLobby(code);
             }
         });
 
@@ -421,67 +414,12 @@
                 state.gameMode = 'multi';
                 document.getElementById('join-code').value = gameCode;
                 state.role = 'player';
-                joinPeer(gameCode.toUpperCase());
+                joinLobby(gameCode.toUpperCase());
             }
         };
 
-        const joinPeer = (code) => {
+        const joinLobby = async (code) => {
             state.gameId = code;
-            joinLobbyUI(code);
-            const statusEl = document.getElementById('connection-status');
-            statusEl.classList.remove('hidden');
-
-            peer = new Peer({
-                config: {
-                    'iceServers': [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:global.stun.twilio.com:3478' }
-                    ]
-                }
-            }); 
-            
-            peer.on('error', (err) => {
-                console.error("PeerJS Client Error:", err);
-                statusEl.innerText = "CONNECTION FAILED. CHECK CODE OR REFRESH.";
-            });
-
-            peer.on('open', () => {
-                hostConnection = peer.connect('edukart-' + code, { reliable: true });
-                
-                hostConnection.on('open', () => {
-                    statusEl.classList.add('hidden');
-                    hostConnection.send({ type: 'join', id: state.sessionId, name: state.userName, color: state.carColor });
-                });
-
-                hostConnection.on('data', (data) => {
-                    if (data.type === 'sync') {
-                        if (data.gameState === 'countdown' && state.gameState === 'menu') {
-                            initStartSequence();
-                        }
-                        state.gameState = data.gameState;
-                        
-                        if (data.weatherIntensity !== undefined) {
-                            state.weatherIntensity = data.weatherIntensity;
-                        }
-
-                        for (let id in data.players) {
-                            if (!state.players[id] && state.gameState === 'menu') {
-                                state.players[id] = data.players[id];
-                                updateLobbyListUI(); 
-                            } else {
-                                state.players[id] = data.players[id]; 
-                            }
-                        }
-                    }
-                });
-                
-                hostConnection.on('error', () => {
-                    statusEl.innerText = "FAILED TO CONNECT TO HOST.";
-                });
-            });
-        };
-
-        const joinLobbyUI = (code) => {
             document.getElementById('main-menu').style.display = 'none';
             document.getElementById('lobby-menu').classList.remove('hidden');
             document.getElementById('display-room-code').innerText = code;
@@ -494,53 +432,80 @@
                 document.getElementById('btn-start').classList.remove('hidden');
                 document.getElementById('waiting-host-msg').style.display = 'none';
                 
-                document.getElementById('btn-start').addEventListener('click', () => {
-                    state.gameState = 'countdown'; 
-                    initStartSequence(); 
+                document.getElementById('btn-start').addEventListener('click', async () => {
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
+                    const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'EduKartGames', code);
+                    await updateDoc(gameRef, { status: 'countdown' }); 
                 });
             }
+
+            setupNetworkListeners();
+            if (state.role === 'player') syncPlayerState(); 
         };
 
-        const updateLobbyListUI = () => {
-            const lobbyList = document.getElementById('lobby-player-list');
-            if (!lobbyList || state.gameState !== 'menu') return;
+        const setupNetworkListeners = () => {
+            if (!db || !state.userId || state.gameMode === 'single') return;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
             
-            lobbyList.innerHTML = "";
-            for (let id in state.players) {
-                const data = state.players[id];
-                const li = document.createElement('li');
-                li.innerHTML = `<span style="display:inline-block; width:12px; height:12px; background-color:${data.carColor}; border:1px solid white;"></span> ${data.name}`;
-                li.className = "border-b border-gray-700 pb-1";
-                lobbyList.appendChild(li);
-            }
-        };
+            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'EduKartGames', state.gameId);
+            unsubscribeGame = onSnapshot(gameRef, (snap) => {
+                if (snap.exists()) {
+                    const data = snap.data();
+                    if (data.status === 'countdown' && state.gameState === 'menu') {
+                        initStartSequence();
+                    }
+                }
+            }, (err) => console.error(err));
 
-        const syncNetworkState = () => {
-            if (state.gameMode === 'single') return;
+            const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'EduKartPlayers');
+            unsubscribePlayers = onSnapshot(playersCol, (snapshot) => {
+                const lobbyList = document.getElementById('lobby-player-list');
+                if(lobbyList && state.gameState === 'menu') lobbyList.innerHTML = "";
+                
+                snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
+                    if (data.gameId === state.gameId) {
+                        state.players[docSnap.id] = data; 
+                        
+                        if (state.gameState === 'menu' && lobbyList) {
+                            const li = document.createElement('li');
+                            li.innerHTML = `<span style="display:inline-block; width:12px; height:12px; background-color:${data.carColor}; border:1px solid white;"></span> ${data.name}`;
+                            li.className = "border-b border-gray-700 pb-1";
+                            lobbyList.appendChild(li);
+                        }
 
-            if (state.role === 'host') {
-                const syncPayload = { 
-                    type: 'sync', 
-                    gameState: state.gameState, 
-                    players: state.players,
-                    weatherIntensity: state.weatherIntensity 
-                };
-                clientConnections.forEach(conn => {
-                    if (conn.open) conn.send(syncPayload);
-                });
-            } else if (state.role === 'player' && hostConnection && hostConnection.open) {
-                hostConnection.send({
-                    type: 'update',
-                    id: state.sessionId,
-                    data: {
-                        name: state.userName, 
-                        carColor: state.carColor,
-                        x: physics.x, y: physics.y, z: physics.z, rotation: physics.rotation,
-                        lap: state.myLap, progress: state.myProgress,
-                        weatherIntensity: state.weatherIntensity
+                        if (state.gameState === 'playing' || state.gameState === 'countdown') {
+                            if (state.role === 'host' || docSnap.id !== state.sessionId) {
+                                updateRemotePlayerMesh(docSnap.id, data);
+                            }
+                        }
                     }
                 });
-            }
+                
+                if (state.gameState === 'playing') updateLeaderboardHUD();
+
+            }, (err) => console.error(err));
+        };
+
+        const syncPlayerState = async () => {
+            if (!db || !state.sessionId || state.gameState === 'finished' || state.role !== 'player' || state.gameMode === 'single') return;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'edukart-retro-app';
+            const playerRef = doc(db, 'artifacts', appId, 'public', 'data', 'EduKartPlayers', state.sessionId);
+            
+            try {
+                await setDoc(playerRef, {
+                    gameId: state.gameId,
+                    name: state.userName,
+                    carColor: state.carColor,
+                    x: physics.x,
+                    y: physics.y,
+                    z: physics.z,
+                    rotation: physics.rotation,
+                    lap: state.myLap,
+                    progress: state.myProgress,
+                    timestamp: new Date().getTime()
+                }, { merge: true });
+            } catch(e) {}
         };
 
         // ==========================================
@@ -574,65 +539,48 @@
                     localVehicleMesh.rotation.y = physics.rotation;
                 }
 
-                state.players[state.sessionId] = {
-                    name: state.userName, carColor: state.carColor, progress: 0, lap: 1,
-                    x: physics.x, y: physics.y, z: physics.z, rotation: physics.rotation
-                };
+                if(state.gameMode === 'multi') syncPlayerState(); 
             }
 
-            if (state.gameMode === 'single') {
-                initBots();
-            }
+            if (state.gameMode === 'single') initBots();
 
             animate(); 
 
-            if (state.role === 'player' || state.gameMode === 'single') {
-                const overlay = document.getElementById('countdown-overlay');
-                const lRed = document.getElementById('light-red');
-                const lYellow = document.getElementById('light-yellow');
-                const lGreen = document.getElementById('light-green');
-                const tText = document.getElementById('countdown-text');
+            const overlay = document.getElementById('countdown-overlay');
+            const lRed = document.getElementById('light-red');
+            const lYellow = document.getElementById('light-yellow');
+            const lGreen = document.getElementById('light-green');
+            const tText = document.getElementById('countdown-text');
+            
+            overlay.style.display = 'flex';
+            
+            setTimeout(() => { lRed.classList.add('red'); tText.innerText = "3..."; }, 1000);
+            setTimeout(() => { lYellow.classList.add('yellow'); tText.innerText = "2..."; }, 2000);
+            setTimeout(() => { 
+                lGreen.classList.add('green'); 
+                tText.innerText = "1..."; 
+                tText.style.color = "#00ff00";
+            }, 3000);
+            setTimeout(() => {
+                overlay.style.display = 'none';
                 
-                overlay.style.display = 'flex';
+                state.gameState = 'playing';
+                raceStartTime = Date.now();
+                document.getElementById('hud').classList.remove('hidden');
+                document.getElementById('global-timer').classList.remove('hidden');
                 
-                setTimeout(() => { lRed.classList.add('red'); tText.innerText = "3..."; }, 1000);
-                setTimeout(() => { lYellow.classList.add('yellow'); tText.innerText = "2..."; }, 2000);
-                setTimeout(() => { 
-                    lGreen.classList.add('green'); 
-                    tText.innerText = "1..."; 
-                    tText.style.color = "#00ff00";
-                }, 3000);
-                setTimeout(() => {
-                    overlay.style.display = 'none';
-                    
-                    state.gameState = 'playing'; 
-                    raceStartTime = Date.now();
-                    document.getElementById('hud').classList.remove('hidden');
-                    document.getElementById('global-timer').classList.remove('hidden');
-                    
-                    if (state.role === 'player') {
-                        document.getElementById('player-stats').classList.remove('hidden');
-                        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
-                            document.getElementById('mobile-controls').style.display = 'block';
-                        }
+                if (state.role === 'player') {
+                    document.getElementById('player-stats').classList.remove('hidden');
+                    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                        document.getElementById('mobile-controls').style.display = 'block';
                     }
-                }, 4000);
-            } else if (state.role === 'host') {
-                setTimeout(() => {
-                    state.gameState = 'playing';
-                    raceStartTime = Date.now();
-                }, 4000);
-            }
+                }
+            }, 4000);
         };
 
         const initBots = () => {
             botData.forEach(bot => {
-                bot.active = true;
-                bot.lap = 1;
-                bot.curveT = 0;
-                bot.waitTimer = 0;
-                bot.speedMult = 1.0;
-                bot.passedGates = [];
+                bot.active = true; bot.lap = 1; bot.curveT = 0; bot.waitTimer = 0; bot.speedMult = 1.0; bot.passedGates = [];
                 
                 const pt = trackCurve.getPointAt(0);
                 const dir = trackCurve.getTangentAt(0);
@@ -640,12 +588,8 @@
                 const z = pt.z - (dir.x * bot.offset);
                 
                 state.players[bot.id] = {
-                    name: bot.name,
-                    carColor: bot.color,
-                    x: x, y: 1.2, z: z,
-                    rotation: Math.atan2(dir.x, dir.z),
-                    lap: 1,
-                    progress: 0
+                    name: bot.name, carColor: bot.color, x: x, y: 1.2, z: z,
+                    rotation: Math.atan2(dir.x, dir.z), lap: 1, progress: 0
                 };
             });
         };
@@ -690,18 +634,31 @@
         };
 
         // ==========================================
-        // 5. THREE.JS FLAT TRACK ENGINE & WEATHER
+        // STORM SUMMONER MECHANIC
+        // ==========================================
+        const setStormIntensity = (intensity) => {
+            weather.intensity = Math.max(0, Math.min(1, intensity));
+            if (!scene) return;
+
+            // Environmental changes
+            scene.background.lerpColors(colorSunny, colorStorm, weather.intensity);
+            scene.fog.color.lerpColors(colorSunny, colorStorm, weather.intensity);
+            if(ambientLight) ambientLight.intensity = 0.6 - (0.3 * weather.intensity);
+            if(dirLight) dirLight.intensity = 0.7 - (0.4 * weather.intensity);
+
+            // Friction drops as storm intensifies, making it super slippery
+            physics.friction = physics.baseFriction - (0.004 * weather.intensity);
+        };
+
+        // ==========================================
+        // 5. THREE.JS FLAT TRACK ENGINE
         // ==========================================
         const init3D = () => {
             const container = document.getElementById('game-canvas');
             
             scene = new THREE.Scene();
-            
-            sunnyColor = new THREE.Color(0x6CB4EE);
-            typhoonColor = new THREE.Color(0x333344);
-            
-            scene.background = sunnyColor.clone();
-            scene.fog = new THREE.Fog(sunnyColor.clone(), 40, 400);
+            scene.background = colorSunny.clone(); 
+            scene.fog = new THREE.Fog(colorSunny.getHex(), 40, 400);
 
             camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 2000);
             
@@ -712,7 +669,7 @@
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             container.appendChild(renderer.domElement);
 
-            ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
             scene.add(ambientLight);
             
             dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
@@ -729,8 +686,21 @@
             scene.add(dirLight);
 
             createRetroEnvironment();
-            createWeather();
             
+            // Storm Particles
+            const rainGeo = new THREE.BufferGeometry();
+            const rainCount = 2500;
+            const rainPos = new Float32Array(rainCount * 3);
+            for(let i=0; i<rainCount; i++) {
+                rainPos[i*3] = (Math.random() - 0.5) * 300;
+                rainPos[i*3+1] = Math.random() * 150;
+                rainPos[i*3+2] = (Math.random() - 0.5) * 300;
+            }
+            rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+            const rainMat = new THREE.PointsMaterial({ color: 0xcccccc, size: 0.8, transparent: true, opacity: 0 });
+            rainSystem = new THREE.Points(rainGeo, rainMat);
+            scene.add(rainSystem);
+
             if (state.role === 'player') {
                 localVehicleMesh = createMonsterTruck(state.carColor, state.userName, true);
                 scene.add(localVehicleMesh);
@@ -740,71 +710,9 @@
             setupInputs();
         };
 
-        const createWeather = () => {
-            rainGeo = new THREE.BufferGeometry();
-            const rainCount = 8000;
-            const positions = new Float32Array(rainCount * 3);
-            for(let i=0;i<rainCount;i++) {
-                positions[i*3] = (Math.random() - 0.5) * 1000; 
-                positions[i*3+1] = Math.random() * 300;       
-                positions[i*3+2] = (Math.random() - 0.5) * 1000; 
-            }
-            rainGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            const rainMat = new THREE.PointsMaterial({
-                color: 0xaaaaaa,
-                size: 2.5,
-                transparent: true,
-                opacity: 0.0 // Starts invisible (sunny)
-            });
-            rainSystem = new THREE.Points(rainGeo, rainMat);
-            scene.add(rainSystem);
-        };
-
-        const updateWeather = () => {
-            const w = state.weatherIntensity || 0;
-            
-            scene.background.copy(sunnyColor).lerp(typhoonColor, w);
-            scene.fog.color.copy(sunnyColor).lerp(typhoonColor, w);
-            
-            if (ambientLight) ambientLight.intensity = 0.85 - (w * 0.45);
-            if (dirLight) dirLight.intensity = 0.7 - (w * 0.5);
-
-            const weatherHud = document.getElementById('weather-status');
-            const hudContainer = document.getElementById('weather-hud');
-            
-            if(weatherHud && hudContainer) {
-                hudContainer.style.display = 'block';
-                if(w < 0.2) { weatherHud.innerText = "SUNNY"; weatherHud.style.color = "#FACC15"; }
-                else if(w < 0.6) { weatherHud.innerText = "CLOUDY"; weatherHud.style.color = "#9CA3AF"; }
-                else if(w < 0.9) { weatherHud.innerText = "STORM"; weatherHud.style.color = "#60A5FA"; }
-                else { weatherHud.innerText = "TYPHOON!"; weatherHud.style.color = "#EF4444"; }
-            }
-
-            if(!rainSystem) return;
-            rainSystem.material.opacity = w * 0.8;
-            
-            if (w > 0) {
-                const positions = rainGeo.attributes.position.array;
-                for(let i=0; i<positions.length; i+=3) {
-                    positions[i+1] -= (w * 8.0 + 1.0); // Rain speed down
-                    positions[i] -= (w * 3.0);         // Wind drift left
-                    
-                    if (positions[i+1] < 0) {
-                        positions[i+1] = 300;
-                        positions[i] = (Math.random() - 0.5) * 1000 + (w * 300); // Wind wrap
-                        positions[i+2] = (Math.random() - 0.5) * 1000;
-                    }
-                }
-                rainGeo.attributes.position.needsUpdate = true;
-            }
-        };
-
         const createRetroEnvironment = () => {
             let seed = 999;
-            const srnd = () => {
-                let x = Math.sin(seed++) * 10000;
-                return x - Math.floor(x);
-            };
+            const srnd = () => { let x = Math.sin(seed++) * 10000; return x - Math.floor(x); };
 
             const groundGeo = new THREE.PlaneGeometry(2500, 2500);
             const groundMat = new THREE.MeshLambertMaterial({ color: 0x3b7a3b }); 
@@ -872,27 +780,22 @@
                     const tx = pt.x + (tangent.z * offset);
                     const tz = pt.z - (tangent.x * offset);
                     
-                    const yPos = 0; 
-
                     let isTree = srnd() > 0.4;
                     let obj, radius, height;
                     if (isTree) {
                         obj = createLowPolyTree();
-                        radius = 4;
-                        height = 15;
+                        radius = 4; height = 15;
                     } else {
                         const size = 3 + srnd() * 4;
                         obj = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 0), rockMat);
                         obj.rotation.y = srnd() * Math.PI;
                         obj.position.y = size - 1; 
                         obj.castShadow = true;
-                        radius = size * 0.8;
-                        height = size * 2;
+                        radius = size * 0.8; height = size * 2;
                     }
                     
-                    obj.position.x = tx;
-                    obj.position.z = tz;
-                    if(isTree) obj.position.y = yPos;
+                    obj.position.x = tx; obj.position.z = tz;
+                    if(isTree) obj.position.y = 0;
                     scene.add(obj);
                     colliders.push({ x: tx, z: tz, radius: radius, h: height });
                 });
@@ -938,7 +841,7 @@
             });
         };
 
-        const createMonsterTruck = (colorHex) => {
+        const createMonsterTruck = (colorHex, name, isLocal) => {
             const group = new THREE.Group();
             
             const mat = new THREE.MeshLambertMaterial({color: colorHex});
@@ -974,9 +877,8 @@
         };
 
         const updateRemotePlayerMesh = (id, data) => {
-            if (data.x === undefined || isNaN(data.x) || isNaN(data.y) || isNaN(data.z) || isNaN(data.rotation)) return; 
             if (!remoteVehicleMeshes[id]) {
-                const mesh = createMonsterTruck(data.carColor);
+                const mesh = createMonsterTruck(data.carColor, data.name, false);
                 mesh.position.set(data.x, data.y, data.z); 
                 mesh.rotation.y = data.rotation;
                 scene.add(mesh);
@@ -997,34 +899,31 @@
         };
 
         // ==========================================
-        // 6. INPUT & CONTROLS (Storm Summoner A-Z)
+        // 6. INPUT & CONTROLS
         // ==========================================
         const setupInputs = () => {
-            document.addEventListener('keydown', (e) => {
-                // Storm Summoner Support (A-Z keys map to Weather Intensity 0.0 - 1.0)
-                if (e.key.length === 1 && e.key.match(/[a-z]/i)) {
-                    let charCode = e.key.toUpperCase().charCodeAt(0);
-                    if (charCode >= 65 && charCode <= 90) { // A to Z
-                        state.weatherIntensity = (charCode - 65) / 25;
-                    }
-                }
-
-                if(state.role !== 'player') return;
-                // Only allow Arrow Keys for navigation
-                if(e.key === 'ArrowUp') inputs.up = true;
-                if(e.key === 'ArrowDown') inputs.down = true;
-                if(e.key === 'ArrowLeft') inputs.left = true;
-                if(e.key === 'ArrowRight') inputs.right = true;
-                if(e.key === ' ' || e.code === 'Space') inputs.jump = true;
-            });
+            if(state.role !== 'player') return;
             
+            document.addEventListener('keydown', (e) => {
+                // Steering and moving logic limited to Arrows + Space
+                if(e.key === 'ArrowUp') inputs.w = true;
+                if(e.key === 'ArrowDown') inputs.s = true;
+                if(e.key === 'ArrowLeft') inputs.a = true;
+                if(e.key === 'ArrowRight') inputs.d = true;
+                if(e.key === ' ' || e.code === 'Space') inputs.jump = true;
+
+                // Storm Summoner Mode A-Z
+                if(e.keyCode >= 65 && e.keyCode <= 90) {
+                    const intensity = (e.keyCode - 65) / 25; // 0 for A, 1 for Z
+                    setStormIntensity(intensity);
+                }
+            });
+
             document.addEventListener('keyup', (e) => {
-                if(state.role !== 'player') return;
-                // Only allow Arrow Keys for navigation
-                if(e.key === 'ArrowUp') inputs.up = false;
-                if(e.key === 'ArrowDown') inputs.down = false;
-                if(e.key === 'ArrowLeft') inputs.left = false;
-                if(e.key === 'ArrowRight') inputs.right = false;
+                if(e.key === 'ArrowUp') inputs.w = false;
+                if(e.key === 'ArrowDown') inputs.s = false;
+                if(e.key === 'ArrowLeft') inputs.a = false;
+                if(e.key === 'ArrowRight') inputs.d = false;
                 if(e.key === ' ' || e.code === 'Space') inputs.jump = false;
             });
 
@@ -1035,8 +934,8 @@
                     el.addEventListener('touchend', (e) => { e.preventDefault(); inputs[key] = false; });
                 }
             };
-            bindTouch('btn-gas', 'up'); bindTouch('btn-brake', 'down');
-            bindTouch('btn-left', 'left'); bindTouch('btn-right', 'right');
+            bindTouch('btn-gas', 'w'); bindTouch('btn-brake', 's');
+            bindTouch('btn-left', 'a'); bindTouch('btn-right', 'd');
             bindTouch('btn-jump', 'jump');
         };
 
@@ -1055,18 +954,19 @@
                     updateCurveProgressAndGates();
                 }
                 updateCameraPlayer();
+                if (state.gameMode === 'multi' && now - lastSyncTime > SYNC_RATE) {
+                    syncPlayerState();
+                    lastSyncTime = now;
+                }
             } 
             
             if (state.gameMode === 'single') {
                 updateBots();
-            } else if (state.gameMode === 'multi' && now - lastSyncTime > SYNC_RATE) {
-                syncNetworkState(); 
-                lastSyncTime = now;
             }
 
             for (let id in remoteVehicleMeshes) {
                 const mesh = remoteVehicleMeshes[id];
-                if (mesh.userData.targetX !== undefined && !isNaN(mesh.userData.targetX)) {
+                if (mesh.userData.targetX !== undefined) {
                     mesh.position.x += (mesh.userData.targetX - mesh.position.x) * 0.2;
                     mesh.position.y += (mesh.userData.targetY - mesh.position.y) * 0.2;
                     mesh.position.z += (mesh.userData.targetZ - mesh.position.z) * 0.2;
@@ -1082,8 +982,24 @@
                 if(gm.active) gm.wall.material.opacity = 0.3 + Math.sin(now * 0.005) * 0.2;
             });
 
+            // Animate Storm Particles
+            if(weather.intensity > 0 && rainSystem) {
+                rainSystem.material.opacity = weather.intensity * 0.8;
+                const positions = rainSystem.geometry.attributes.position.array;
+                for(let i=1; i<positions.length; i+=3) {
+                    positions[i] -= (2 + weather.intensity * 3); // fall speed
+                    if(positions[i] < 0) {
+                        positions[i] = 100 + Math.random() * 50; // Reset to sky
+                        positions[i-1] = camera.position.x + (Math.random() - 0.5) * 300; // x tracking
+                        positions[i+1] = camera.position.z + (Math.random() - 0.5) * 300; // z tracking
+                    }
+                }
+                rainSystem.geometry.attributes.position.needsUpdate = true;
+            } else if (rainSystem) {
+                rainSystem.material.opacity = 0;
+            }
+
             updateLeaderboardHUD();
-            updateWeather();
 
             if (state.role === 'host') {
                 renderHostView();
@@ -1095,9 +1011,6 @@
 
         const updateBots = () => {
             if (state.gameState !== 'playing') return;
-
-            const wInt = state.weatherIntensity || 0;
-            const slipperyMulti = 1.0 - (wInt * 0.6); // Bots slow down during storms
 
             botData.forEach(bot => {
                 if (!bot.active) return;
@@ -1111,7 +1024,7 @@
                 if (bot.speedMult > 1.0) bot.speedMult -= 0.005;
                 else bot.speedMult = 1.0;
 
-                bot.curveT += (bot.baseSpeed * bot.speedMult) * slipperyMulti;
+                bot.curveT += bot.baseSpeed * bot.speedMult;
                 
                 if (bot.curveT >= 1.0) {
                     bot.curveT -= 1.0;
@@ -1135,11 +1048,9 @@
                 const rotation = Math.atan2(dir.x, dir.z);
 
                 state.players[bot.id] = {
-                    name: bot.name,
-                    carColor: bot.color,
+                    name: bot.name, carColor: bot.color,
                     x: x, y: y, z: z, rotation: rotation,
-                    lap: bot.lap,
-                    progress: (bot.lap * 10) + bot.curveT
+                    lap: bot.lap, progress: (bot.lap * 10) + bot.curveT
                 };
 
                 updateRemotePlayerMesh(bot.id, state.players[bot.id]);
@@ -1149,16 +1060,7 @@
         const renderHostView = () => {
             const w = window.innerWidth / 3.5; 
             const h = window.innerHeight / 3.5;
-            
-            renderer.setViewport(0, 0, w, h);
-            renderer.setScissor(0, 0, w, h);
             renderer.setScissorTest(true);
-            renderer.setClearColor(0x000000, 1);
-            renderer.clear();
-            
-            // Restore appropriate background color based on weather
-            const currentSkyColor = sunnyColor.clone().lerp(typhoonColor, state.weatherIntensity || 0);
-            renderer.setClearColor(currentSkyColor, 1);
 
             const pIds = Object.keys(state.players);
             const activeIds = pIds.slice(0, 4);
@@ -1172,26 +1074,17 @@
 
             if (activeIds.length > 0) {
                 activeIds.forEach((id, index) => {
-                    const data = state.players[id];
-                    let mesh = remoteVehicleMeshes[id];
-                    
-                    if(!mesh && data.x !== undefined && !isNaN(data.x)) {
-                        updateRemotePlayerMesh(id, data);
-                        mesh = remoteVehicleMeshes[id];
+                    const mesh = remoteVehicleMeshes[id];
+                    if(!mesh) {
+                        updateRemotePlayerMesh(id, state.players[id]);
+                        return;
                     }
 
                     renderer.setViewport(views[index][0], views[index][1], views[index][2], views[index][3]);
                     renderer.setScissor(views[index][0], views[index][1], views[index][2], views[index][3]);
 
-                    if (mesh && !isNaN(mesh.position.x)) {
-                        camera.position.set(mesh.position.x + Math.sin(mesh.rotation.y)*-25, mesh.position.y + 15, mesh.position.z + Math.cos(mesh.rotation.y)*-25);
-                        camera.lookAt(mesh.position.x, mesh.position.y, mesh.position.z);
-                    } else {
-                        const startPt = trackCurve ? trackCurve.getPointAt(0) : new THREE.Vector3(0,0,0);
-                        camera.position.set(startPt.x - 25, 15, startPt.z - 25);
-                        camera.lookAt(startPt.x, 0, startPt.z);
-                    }
-                    
+                    camera.position.set(mesh.position.x + Math.sin(mesh.rotation.y)*-25, mesh.position.y + 15, mesh.position.z + Math.cos(mesh.rotation.y)*-25);
+                    camera.lookAt(mesh.position.x, mesh.position.y, mesh.position.z);
                     renderer.render(scene, camera);
                 });
             } else {
@@ -1231,7 +1124,6 @@
             };
 
             for(let id in remoteVehicleMeshes) {
-                if (id === state.sessionId) continue; 
                 const mesh = remoteVehicleMeshes[id];
                 const pData = state.players[id]; 
                 if(pData) addLabel(mesh, pData.name, pData.carColor);
@@ -1240,12 +1132,6 @@
 
         const updatePhysics = () => {
             if (state.triviaActive || state.hasFinished) return;
-
-            const wInt = state.weatherIntensity || 0;
-            // Base friction = 0.005. Drops to 0.001 at Typhoon mode (Slippery coasting)
-            const currentFriction = 0.005 - (wInt * 0.004);
-            // Base turnSpeed = 0.045. Drops to 0.02 at Typhoon mode (Sluggish turning)
-            const currentTurnSpeed = 0.045 - (wInt * 0.025);
 
             let currentMaxSpeed = physics.maxSpeed;
             if (physics.boostTimer > 0) {
@@ -1264,41 +1150,32 @@
                 physics.vy = 0;
             }
 
-            if (inputs.up) physics.speed += physics.acceleration;
-            else if (inputs.down) physics.speed -= physics.acceleration * 1.5;
+            if (inputs.w) physics.speed += physics.acceleration;
+            else if (inputs.s) physics.speed -= physics.acceleration * 1.5;
             else {
-                if (physics.speed > 0) physics.speed -= currentFriction;
-                if (physics.speed < 0) physics.speed += currentFriction;
-                if (Math.abs(physics.speed) < currentFriction) physics.speed = 0;
+                if (physics.speed > 0) physics.speed -= physics.friction;
+                if (physics.speed < 0) physics.speed += physics.friction;
+                if (Math.abs(physics.speed) < physics.friction) physics.speed = 0;
             }
 
             if (physics.speed > currentMaxSpeed) physics.speed = currentMaxSpeed;
             if (physics.speed < -currentMaxSpeed / 2) physics.speed = -currentMaxSpeed / 2;
 
             let keyTurn = 0;
-            if (inputs.left) keyTurn = 1;
-            if (inputs.right) keyTurn = -1;
-            
-            // Allow turning without moving forward to aim, but slower
+            if (inputs.a) keyTurn = 1;
+            if (inputs.d) keyTurn = -1;
+
             if (Math.abs(physics.speed) > 0.05) {
                 const turnMod = physics.speed > 0 ? 1 : -1;
-                physics.rotation += currentTurnSpeed * keyTurn * turnMod;
+                physics.rotation += physics.turnSpeed * keyTurn * turnMod;
                 physics.camPan *= 0.8; 
             } else {
                 physics.camPan += keyTurn * 0.05;
                 physics.camPan = Math.max(-1.5, Math.min(1.5, physics.camPan));
-                // Optional: Allow tiny turning while stationary to re-orient
-                physics.rotation += currentTurnSpeed * 0.5 * keyTurn;
             }
-
-            if (isNaN(physics.rotation)) physics.rotation = 0;
 
             physics.x += Math.sin(physics.rotation) * physics.speed;
             physics.z += Math.cos(physics.rotation) * physics.speed;
-
-            if (isNaN(physics.x) || isNaN(physics.z)) {
-                physics.x = 0; physics.z = 0; physics.speed = 0;
-            }
 
             const checkCollision = (cx, cz, radius, objHeight) => {
                 if (physics.y > objHeight) return;
@@ -1341,11 +1218,8 @@
             
             let currentT = closestIdx / 1000;
             
-            // Reduced off-track penalty during storms (mud)
-            const offTrackFriction = 0.92 + (state.weatherIntensity * 0.05);
-
             if(closestDist > 52 && physics.boostTimer <= 0) {
-                physics.speed *= offTrackFriction; 
+                physics.speed *= 0.92; 
             }
 
             if (physics.curveT > 0.8 && currentT < 0.2) {
@@ -1489,13 +1363,12 @@
             document.getElementById('player-stats').style.display = 'none';
             document.getElementById('mobile-controls').style.display = 'none';
             document.getElementById('labels-layer').style.display = 'none';
-            document.getElementById('weather-hud').style.display = 'none';
             document.getElementById('post-race').classList.remove('hidden');
 
             startConfetti();
         };
 
-        window.onload = initNetwork;
+        window.onload = initFirebase;
 
     </script>
 </body>
