@@ -110,7 +110,7 @@
 
             <div class="mb-4 bg-black/50 p-3 border border-white">
                 <p class="text-[10px] text-yellow-400 pixel-font leading-loose text-center">🏆 FIRST TO 3 LAPS WINS!</p>
-                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>WASD / ARROWS / ON-SCREEN BUTTONS<br>SPACEBAR TO JUMP!</p>
+                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>ARROW KEYS TO DRIVE<br>A-Z TO CONTROL WEATHER<br>SPACEBAR TO JUMP!</p>
             </div>
 
             <div id="loading-msg" class="text-yellow-400 mb-4 pixel-font text-xs animate-pulse">INITIALIZING SYSTEMS...</div>
@@ -269,12 +269,12 @@
             turnSpeed: 0.045, // Dynamic via weather
             boostTimer: 0,
             curveT: 0,
-            vy: 0,           
+            vy: 0,            
             groundY: 1.2, 
-            gravity: 0.03    
+            gravity: 0.03   
         };
 
-        const inputs = { w: false, s: false, a: false, d: false, jump: false }; 
+        const inputs = { up: false, down: false, left: false, right: false, jump: false }; 
         
         let lastSyncTime = 0;
         const SYNC_RATE = 80; 
@@ -325,13 +325,21 @@
         // 3. UI LOGIC & FLOW
         // ==========================================
         document.getElementById('player-name').value = state.userName;
-        document.getElementById('player-name').addEventListener('change', (e) => state.userName = e.target.value.toUpperCase() || "PLAYER");
+        document.getElementById('player-name').addEventListener('change', (e) => {
+            state.userName = e.target.value.toUpperCase() || "PLAYER";
+            if (state.role === 'player' && hostConnection && hostConnection.open) {
+                hostConnection.send({ type: 'update', id: state.sessionId, data: { name: state.userName, carColor: state.carColor } });
+            }
+        });
 
         document.querySelectorAll('.color-option').forEach(el => {
             el.addEventListener('click', () => {
                 document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
                 el.classList.add('selected');
                 state.carColor = el.getAttribute('data-color');
+                if (state.role === 'player' && hostConnection && hostConnection.open) {
+                    hostConnection.send({ type: 'update', id: state.sessionId, data: { name: state.userName, carColor: state.carColor } });
+                }
             });
         });
 
@@ -350,8 +358,20 @@
             state.gameId = code;
             state.role = 'host';
             
-            peer = new Peer('edukart-' + code);
+            peer = new Peer('edukart-' + code, {
+                config: {
+                    'iceServers': [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:global.stun.twilio.com:3478' }
+                    ]
+                }
+            });
             
+            peer.on('error', (err) => {
+                console.error("PeerJS Host Error:", err);
+                document.getElementById('waiting-host-msg').innerText = "NETWORK ERROR. PLEASE REFRESH.";
+            });
+
             peer.on('open', (id) => {
                 joinLobbyUI(code);
             });
@@ -363,8 +383,13 @@
                     if (data.type === 'join') {
                         state.players[data.id] = { name: data.name, carColor: data.color, progress: 0, lap: 1 };
                         updateLobbyListUI();
+                        syncNetworkState(); // Broadcast updated lobby list immediately
                     } else if (data.type === 'update' && state.players[data.id]) {
                         Object.assign(state.players[data.id], data.data);
+                        if (state.gameState === 'menu') {
+                            updateLobbyListUI();
+                            syncNetworkState();
+                        }
                         
                         // Sync Weather globally if a player adjusts it
                         if (data.data.weatherIntensity !== undefined) {
@@ -406,9 +431,22 @@
             const statusEl = document.getElementById('connection-status');
             statusEl.classList.remove('hidden');
 
-            peer = new Peer(); 
+            peer = new Peer({
+                config: {
+                    'iceServers': [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:global.stun.twilio.com:3478' }
+                    ]
+                }
+            }); 
+            
+            peer.on('error', (err) => {
+                console.error("PeerJS Client Error:", err);
+                statusEl.innerText = "CONNECTION FAILED. CHECK CODE OR REFRESH.";
+            });
+
             peer.on('open', () => {
-                hostConnection = peer.connect('edukart-' + code);
+                hostConnection = peer.connect('edukart-' + code, { reliable: true });
                 
                 hostConnection.on('open', () => {
                     statusEl.classList.add('hidden');
@@ -964,7 +1002,7 @@
         const setupInputs = () => {
             document.addEventListener('keydown', (e) => {
                 // Storm Summoner Support (A-Z keys map to Weather Intensity 0.0 - 1.0)
-                if (e.key.length === 1) {
+                if (e.key.length === 1 && e.key.match(/[a-z]/i)) {
                     let charCode = e.key.toUpperCase().charCodeAt(0);
                     if (charCode >= 65 && charCode <= 90) { // A to Z
                         state.weatherIntensity = (charCode - 65) / 25;
@@ -972,19 +1010,21 @@
                 }
 
                 if(state.role !== 'player') return;
-                if(e.key === 'w' || e.key === 'ArrowUp') inputs.w = true;
-                if(e.key === 's' || e.key === 'ArrowDown') inputs.s = true;
-                if(e.key === 'a' || e.key === 'ArrowLeft') inputs.a = true;
-                if(e.key === 'd' || e.key === 'ArrowRight') inputs.d = true;
+                // Only allow Arrow Keys for navigation
+                if(e.key === 'ArrowUp') inputs.up = true;
+                if(e.key === 'ArrowDown') inputs.down = true;
+                if(e.key === 'ArrowLeft') inputs.left = true;
+                if(e.key === 'ArrowRight') inputs.right = true;
                 if(e.key === ' ' || e.code === 'Space') inputs.jump = true;
             });
             
             document.addEventListener('keyup', (e) => {
                 if(state.role !== 'player') return;
-                if(e.key === 'w' || e.key === 'ArrowUp') inputs.w = false;
-                if(e.key === 's' || e.key === 'ArrowDown') inputs.s = false;
-                if(e.key === 'a' || e.key === 'ArrowLeft') inputs.a = false;
-                if(e.key === 'd' || e.key === 'ArrowRight') inputs.d = false;
+                // Only allow Arrow Keys for navigation
+                if(e.key === 'ArrowUp') inputs.up = false;
+                if(e.key === 'ArrowDown') inputs.down = false;
+                if(e.key === 'ArrowLeft') inputs.left = false;
+                if(e.key === 'ArrowRight') inputs.right = false;
                 if(e.key === ' ' || e.code === 'Space') inputs.jump = false;
             });
 
@@ -995,8 +1035,8 @@
                     el.addEventListener('touchend', (e) => { e.preventDefault(); inputs[key] = false; });
                 }
             };
-            bindTouch('btn-gas', 'w'); bindTouch('btn-brake', 's');
-            bindTouch('btn-left', 'a'); bindTouch('btn-right', 'd');
+            bindTouch('btn-gas', 'up'); bindTouch('btn-brake', 'down');
+            bindTouch('btn-left', 'left'); bindTouch('btn-right', 'right');
             bindTouch('btn-jump', 'jump');
         };
 
@@ -1224,8 +1264,8 @@
                 physics.vy = 0;
             }
 
-            if (inputs.w) physics.speed += physics.acceleration;
-            else if (inputs.s) physics.speed -= physics.acceleration * 1.5;
+            if (inputs.up) physics.speed += physics.acceleration;
+            else if (inputs.down) physics.speed -= physics.acceleration * 1.5;
             else {
                 if (physics.speed > 0) physics.speed -= currentFriction;
                 if (physics.speed < 0) physics.speed += currentFriction;
@@ -1236,8 +1276,8 @@
             if (physics.speed < -currentMaxSpeed / 2) physics.speed = -currentMaxSpeed / 2;
 
             let keyTurn = 0;
-            if (inputs.a) keyTurn = 1;
-            if (inputs.d) keyTurn = -1;
+            if (inputs.left) keyTurn = 1;
+            if (inputs.right) keyTurn = -1;
             
             // Allow turning without moving forward to aim, but slower
             if (Math.abs(physics.speed) > 0.05) {
