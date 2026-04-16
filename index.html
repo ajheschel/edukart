@@ -337,39 +337,14 @@
             checkUrlForGame();
         };
 
-        // WebRTC config with highly reliable massive array of STUN servers and TURN fallback for strict NATs
+        // WebRTC config with highly reliable STUN servers (removed free TURN which causes connection hangs)
         const peerConfig = {
             debug: 2,
-            secure: true,
-            pingInterval: 5000,
             config: {
-                iceCandidatePoolSize: 10, // Pre-fetch candidates for faster reliable connections
-                iceServers: [
+                'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
                     { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun3.l.google.com:19302' },
-                    { urls: 'stun:stun4.l.google.com:19302' },
-                    { urls: 'stun:stun.services.mozilla.com' },
-                    { urls: 'stun:stun.cloudflare.com:3478' },
-                    { urls: 'stun:stun.twilio.com:3478' },
-                    { urls: 'stun:stun.kinesis.yahoo.com:3478' },
-                    { urls: 'stun:global.relay.metered.ca:80' },
-                    {
-                        urls: 'turn:global.relay.metered.ca:80',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    },
-                    {
-                        urls: 'turn:global.relay.metered.ca:443',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    },
-                    {
-                        urls: 'turn:global.relay.metered.ca:443?transport=tcp',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    }
+                    { urls: 'stun:stun.cloudflare.com:3478' }
                 ]
             }
         };
@@ -433,12 +408,18 @@
                             document.getElementById('action-buttons').classList.remove('hidden');
                         }, 3000);
                     }
-                }, 15000); // 15 seconds to allow TURN negotiation
+                }, 20000); // Wait up to 20 seconds for signaling to finish
 
                 peer.on('open', (id) => {
                     clearTimeout(timeout);
                     document.getElementById('loading-msg').style.display = 'none';
                     joinLobby(code);
+                });
+
+                // Auto-reconnect if signaling server blips (prevents peer-unavailable)
+                peer.on('disconnected', () => {
+                    console.log("Host disconnected from signaling server. Reconnecting...");
+                    peer.reconnect();
                 });
 
                 peer.on('connection', (conn) => {
@@ -527,15 +508,12 @@
                             document.getElementById('action-buttons').classList.remove('hidden');
                         }, 3000);
                     }
-                }, 15000); // 15 seconds to allow TURN negotiation
+                }, 20000); 
                 
                 peer.on('open', (id) => {
                     clearTimeout(timeout);
                     state.sessionId = id;
-                    hostConn = peer.connect('edukart-' + code.toLowerCase(), { 
-                        reliable: true,
-                        serialization: 'json' 
-                    });
+                    hostConn = peer.connect('edukart-' + code.toLowerCase());
 
                     hostConn.on('open', () => {
                         document.getElementById('loading-msg').style.display = 'none';
@@ -576,6 +554,11 @@
                         alert("Host disconnected.");
                         window.location.reload();
                     });
+                });
+
+                peer.on('disconnected', () => {
+                    console.log("Player disconnected from signaling server. Reconnecting...");
+                    peer.reconnect();
                 });
 
                 peer.on('error', (err) => {
