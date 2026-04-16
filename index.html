@@ -122,7 +122,7 @@
 
             <div class="mb-4 bg-black/50 p-3 border border-white">
                 <p class="text-[10px] text-yellow-400 pixel-font leading-loose text-center">🏆 FIRST TO 3 LAPS WINS!</p>
-                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>ARROWS TO STEER<br>SPACEBAR TO JUMP!<br><br>HOST: A-Z FOR STORM!</p>
+                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>ARROWS TO STEER<br>SPACEBAR TO JUMP!<br><br>HOST/PRACTICE: A-Z FOR STORM!</p>
             </div>
 
             <div id="loading-msg" class="text-yellow-400 mb-4 pixel-font text-xs animate-pulse">INITIALIZING P2P ENGINE...</div>
@@ -330,13 +330,27 @@
             checkUrlForGame();
         };
 
-        // WebRTC config with Google's public STUN servers for cross-network (NAT) traversal
+        // WebRTC config with Google STUN and Metered's Free OpenRelay TURN servers for NAT traversal
         const peerConfig = {
             config: {
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' }
+                    { urls: 'stun:openrelay.metered.ca:80' },
+                    {
+                        urls: 'turn:openrelay.metered.ca:80',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    },
+                    {
+                        urls: 'turn:openrelay.metered.ca:443',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    },
+                    {
+                        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    }
                 ]
             }
         };
@@ -978,12 +992,14 @@
                     if(e.key === ' ' || e.code === 'Space') inputs.jump = true;
                 }
 
-                // Hosts control the weather using A-Z
-                if (state.role === 'host') {
+                // Hosts and solo players control the weather using A-Z
+                if (state.role === 'host' || state.gameMode === 'single') {
                     if(e.keyCode >= 65 && e.keyCode <= 90) {
                         const intensity = (e.keyCode - 65) / 25; // 0 for A, 1 for Z
                         setStormIntensity(intensity);
-                        broadcastToPlayers({ type: 'weather', intensity: intensity });
+                        if (state.role === 'host') {
+                            broadcastToPlayers({ type: 'weather', intensity: intensity });
+                        }
                     }
                 }
             });
