@@ -337,14 +337,23 @@
             checkUrlForGame();
         };
 
-        // WebRTC config with highly reliable STUN servers and TURN fallback for strict NATs (Cellular/Corporate)
+        // WebRTC config with highly reliable massive array of STUN servers and TURN fallback for strict NATs
         const peerConfig = {
             debug: 2,
             secure: true,
             pingInterval: 5000,
             config: {
-                'iceServers': [
+                iceCandidatePoolSize: 10, // Pre-fetch candidates for faster reliable connections
+                iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' },
+                    { urls: 'stun:stun.services.mozilla.com' },
+                    { urls: 'stun:stun.cloudflare.com:3478' },
+                    { urls: 'stun:stun.twilio.com:3478' },
+                    { urls: 'stun:stun.kinesis.yahoo.com:3478' },
                     { urls: 'stun:global.relay.metered.ca:80' },
                     {
                         urls: 'turn:global.relay.metered.ca:80',
@@ -523,7 +532,10 @@
                 peer.on('open', (id) => {
                     clearTimeout(timeout);
                     state.sessionId = id;
-                    hostConn = peer.connect('edukart-' + code.toLowerCase(), { reliable: true });
+                    hostConn = peer.connect('edukart-' + code.toLowerCase(), { 
+                        reliable: true,
+                        serialization: 'json' 
+                    });
 
                     hostConn.on('open', () => {
                         document.getElementById('loading-msg').style.display = 'none';
