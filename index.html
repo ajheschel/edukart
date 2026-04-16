@@ -122,7 +122,7 @@
 
             <div class="mb-4 bg-black/50 p-3 border border-white">
                 <p class="text-[10px] text-yellow-400 pixel-font leading-loose text-center">🏆 FIRST TO 3 LAPS WINS!</p>
-                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>ARROWS TO STEER<br>SPACEBAR TO JUMP!<br>A-Z FOR STORM MODE!</p>
+                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>ARROWS TO STEER<br>SPACEBAR TO JUMP!<br><br>HOST: A-Z FOR STORM!</p>
             </div>
 
             <div id="loading-msg" class="text-yellow-400 mb-4 pixel-font text-xs animate-pulse">INITIALIZING P2P ENGINE...</div>
@@ -498,6 +498,9 @@
                     }
                     if (msg.type === 'status' && msg.status === 'countdown') {
                         if (state.gameState === 'menu') initStartSequence();
+                    }
+                    if (msg.type === 'weather') {
+                        setStormIntensity(msg.intensity);
                     }
                 });
 
@@ -965,41 +968,48 @@
         // 6. INPUT & CONTROLS
         // ==========================================
         const setupInputs = () => {
-            if(state.role !== 'player') return;
-            
             document.addEventListener('keydown', (e) => {
-                // Steering and moving logic limited to Arrows + Space
-                if(e.key === 'ArrowUp') inputs.w = true;
-                if(e.key === 'ArrowDown') inputs.s = true;
-                if(e.key === 'ArrowLeft') inputs.a = true;
-                if(e.key === 'ArrowRight') inputs.d = true;
-                if(e.key === ' ' || e.code === 'Space') inputs.jump = true;
+                // Players steer and jump
+                if (state.role === 'player') {
+                    if(e.key === 'ArrowUp') inputs.w = true;
+                    if(e.key === 'ArrowDown') inputs.s = true;
+                    if(e.key === 'ArrowLeft') inputs.a = true;
+                    if(e.key === 'ArrowRight') inputs.d = true;
+                    if(e.key === ' ' || e.code === 'Space') inputs.jump = true;
+                }
 
-                // Storm Summoner Mode A-Z
-                if(e.keyCode >= 65 && e.keyCode <= 90) {
-                    const intensity = (e.keyCode - 65) / 25; // 0 for A, 1 for Z
-                    setStormIntensity(intensity);
+                // Hosts control the weather using A-Z
+                if (state.role === 'host') {
+                    if(e.keyCode >= 65 && e.keyCode <= 90) {
+                        const intensity = (e.keyCode - 65) / 25; // 0 for A, 1 for Z
+                        setStormIntensity(intensity);
+                        broadcastToPlayers({ type: 'weather', intensity: intensity });
+                    }
                 }
             });
 
             document.addEventListener('keyup', (e) => {
-                if(e.key === 'ArrowUp') inputs.w = false;
-                if(e.key === 'ArrowDown') inputs.s = false;
-                if(e.key === 'ArrowLeft') inputs.a = false;
-                if(e.key === 'ArrowRight') inputs.d = false;
-                if(e.key === ' ' || e.code === 'Space') inputs.jump = false;
+                if (state.role === 'player') {
+                    if(e.key === 'ArrowUp') inputs.w = false;
+                    if(e.key === 'ArrowDown') inputs.s = false;
+                    if(e.key === 'ArrowLeft') inputs.a = false;
+                    if(e.key === 'ArrowRight') inputs.d = false;
+                    if(e.key === ' ' || e.code === 'Space') inputs.jump = false;
+                }
             });
 
-            const bindTouch = (id, key) => {
-                const el = document.getElementById(id);
-                if(el) {
-                    el.addEventListener('touchstart', (e) => { e.preventDefault(); inputs[key] = true; });
-                    el.addEventListener('touchend', (e) => { e.preventDefault(); inputs[key] = false; });
-                }
-            };
-            bindTouch('btn-gas', 'w'); bindTouch('btn-brake', 's');
-            bindTouch('btn-left', 'a'); bindTouch('btn-right', 'd');
-            bindTouch('btn-jump', 'jump');
+            if (state.role === 'player') {
+                const bindTouch = (id, key) => {
+                    const el = document.getElementById(id);
+                    if(el) {
+                        el.addEventListener('touchstart', (e) => { e.preventDefault(); inputs[key] = true; });
+                        el.addEventListener('touchend', (e) => { e.preventDefault(); inputs[key] = false; });
+                    }
+                };
+                bindTouch('btn-gas', 'w'); bindTouch('btn-brake', 's');
+                bindTouch('btn-left', 'a'); bindTouch('btn-right', 'd');
+                bindTouch('btn-jump', 'jump');
+            }
         };
 
         // ==========================================
@@ -1142,8 +1152,8 @@
             ];
 
             const cssViews = [
-                { top: '2%', left: '2%' },
-                { top: '2%', left: '52%' },
+                { top: '12%', left: '2%' },
+                { top: '12%', left: '52%' },
                 { top: '52%', left: '2%' },
                 { top: '52%', left: '52%' }
             ];
