@@ -331,8 +331,6 @@
         // ==========================================
         // 2. INITIALIZE LOCAL UI
         // ==========================================
-        // 2. INITIALIZE LOCAL UI
-        // ==========================================
         const initNetworkUI = () => {
             document.getElementById('loading-msg').style.display = 'none';
             document.getElementById('action-buttons').classList.remove('hidden');
@@ -342,24 +340,24 @@
         // WebRTC config with highly reliable STUN servers and TURN fallback for strict NATs (Cellular/Corporate)
         const peerConfig = {
             debug: 2,
-            pingInterval: 5000, // Keep connection alive through firewalls
+            secure: true,
+            pingInterval: 5000,
             config: {
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun.cloudflare.com:3478' },
+                    { urls: 'stun:global.relay.metered.ca:80' },
                     {
-                        urls: 'turn:openrelay.metered.ca:80',
+                        urls: 'turn:global.relay.metered.ca:80',
                         username: 'openrelayproject',
                         credential: 'openrelayproject'
                     },
                     {
-                        urls: 'turn:openrelay.metered.ca:443',
+                        urls: 'turn:global.relay.metered.ca:443',
                         username: 'openrelayproject',
                         credential: 'openrelayproject'
                     },
                     {
-                        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                        urls: 'turn:global.relay.metered.ca:443?transport=tcp',
                         username: 'openrelayproject',
                         credential: 'openrelayproject'
                     }
@@ -426,7 +424,7 @@
                             document.getElementById('action-buttons').classList.remove('hidden');
                         }, 3000);
                     }
-                }, 10000);
+                }, 15000); // 15 seconds to allow TURN negotiation
 
                 peer.on('open', (id) => {
                     clearTimeout(timeout);
@@ -520,12 +518,11 @@
                             document.getElementById('action-buttons').classList.remove('hidden');
                         }, 3000);
                     }
-                }, 10000);
+                }, 15000); // 15 seconds to allow TURN negotiation
                 
                 peer.on('open', (id) => {
                     clearTimeout(timeout);
                     state.sessionId = id;
-                    // Force lowercase ID to match host and enforce reliable data channel
                     hostConn = peer.connect('edukart-' + code.toLowerCase(), { reliable: true });
 
                     hostConn.on('open', () => {
