@@ -330,16 +330,28 @@
             checkUrlForGame();
         };
 
-        // WebRTC config with reliable Google STUN servers for NAT traversal
+        // WebRTC config with STUN and Metered's Free OpenRelay TURN servers for reliable NAT traversal
         const peerConfig = {
             debug: 2,
             config: {
                 'iceServers': [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun3.l.google.com:19302' },
-                    { urls: 'stun:stun4.l.google.com:19302' }
+                    { urls: 'stun:openrelay.metered.ca:80' },
+                    {
+                        urls: 'turn:openrelay.metered.ca:80',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    },
+                    {
+                        urls: 'turn:openrelay.metered.ca:443',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    },
+                    {
+                        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    }
                 ]
             }
         };
@@ -393,12 +405,15 @@
             document.getElementById('loading-msg').style.display = 'block';
 
             try {
-                // Pass the ICE servers config and force lowercase ID internally
                 peer = new Peer('edukart-' + code.toLowerCase(), peerConfig);
 
                 let timeout = setTimeout(() => {
                     if (document.getElementById('loading-msg').style.display !== 'none') {
-                        document.getElementById('loading-msg').innerText = "TIMEOUT: CONNECTION BLOCKED BY NETWORK/ADBLOCKER";
+                        document.getElementById('loading-msg').innerText = "TIMEOUT: CONNECTION BLOCKED BY NETWORK";
+                        setTimeout(() => {
+                            document.getElementById('loading-msg').style.display = 'none';
+                            document.getElementById('action-buttons').classList.remove('hidden');
+                        }, 3000);
                     }
                 }, 10000);
 
@@ -426,7 +441,6 @@
                             if(state.players[conn.peer]) {
                                 Object.assign(state.players[conn.peer], msg.data);
                                 
-                                // Update mesh targets so the host view reflects actual player movement
                                 if (state.gameState === 'playing' || state.gameState === 'countdown') {
                                     updateRemotePlayerMesh(conn.peer, state.players[conn.peer]);
                                 }
@@ -443,8 +457,13 @@
                 });
 
                 peer.on('error', (err) => {
+                    clearTimeout(timeout);
                     document.getElementById('loading-msg').innerText = "P2P ERROR: " + err.type;
                     console.error("PeerJS Error:", err);
+                    setTimeout(() => {
+                        document.getElementById('loading-msg').style.display = 'none';
+                        document.getElementById('action-buttons').classList.remove('hidden');
+                    }, 4000);
                 });
 
             } catch (e) {
@@ -480,19 +499,21 @@
             document.getElementById('loading-msg').style.display = 'block';
 
             try {
-                // Pass the ICE servers config
                 peer = new Peer(peerConfig);
                 
                 let timeout = setTimeout(() => {
                     if (document.getElementById('loading-msg').style.display !== 'none') {
                         document.getElementById('loading-msg').innerText = "TIMEOUT: CANNOT REACH SIGNALING SERVER";
+                        setTimeout(() => {
+                            document.getElementById('loading-msg').style.display = 'none';
+                            document.getElementById('action-buttons').classList.remove('hidden');
+                        }, 3000);
                     }
                 }, 10000);
                 
                 peer.on('open', (id) => {
                     clearTimeout(timeout);
                     state.sessionId = id;
-                    // Force lowercase ID to match host
                     hostConn = peer.connect('edukart-' + code.toLowerCase());
 
                     hostConn.on('open', () => {
@@ -506,12 +527,9 @@
                     });
 
                     hostConn.on('data', (msg) => {
-                        // Sync incoming game state & weather
                         if (msg.type === 'lobby_update' || msg.type === 'state_sync') {
                             state.players = msg.players;
                             
-                            // Reliable Weather Sync:
-                            // Ensure clients constantly match the host's weather intensity
                             if (msg.weather !== undefined && msg.weather !== weather.intensity) {
                                 setStormIntensity(msg.weather);
                             }
@@ -540,9 +558,21 @@
                 });
 
                 peer.on('error', (err) => {
-                    document.getElementById('loading-msg').innerText = "CONNECTION FAILED: " + err.type;
+                    clearTimeout(timeout);
+                    let errorMsg = err.type;
+                    if (err.type === 'peer-unavailable') {
+                        errorMsg = "HOST NOT FOUND (BAD CODE OR HOST LEFT)";
+                    } else if (err.type === 'network') {
+                        errorMsg = "SIGNALING SERVER DISCONNECTED";
+                    }
+                    
+                    document.getElementById('loading-msg').innerText = "CONNECTION FAILED: " + errorMsg;
                     console.error("PeerJS Error:", err);
-                    setTimeout(() => window.location.reload(), 4000);
+                    
+                    setTimeout(() => {
+                        document.getElementById('loading-msg').style.display = 'none';
+                        document.getElementById('action-buttons').classList.remove('hidden');
+                    }, 4000);
                 });
 
             } catch (e) {
