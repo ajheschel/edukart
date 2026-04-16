@@ -387,6 +387,11 @@
                     if (msg.type === 'update') {
                         if(state.players[conn.peer]) {
                             Object.assign(state.players[conn.peer], msg.data);
+                            
+                            // Update mesh targets so the host view reflects actual player movement
+                            if (state.gameState === 'playing' || state.gameState === 'countdown') {
+                                updateRemotePlayerMesh(conn.peer, state.players[conn.peer]);
+                            }
                         }
                     }
                 });
