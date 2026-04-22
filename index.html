@@ -151,7 +151,7 @@
 
             <div class="mb-4 bg-black/50 p-3 border border-white">
                 <p class="text-[10px] text-yellow-400 pixel-font leading-loose text-center">🏆 FIRST TO 3 LAPS WINS!</p>
-                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>ARROWS TO STEER<br>SPACEBAR TO JUMP!<br><br>HOST/PRACTICE: A-Z FOR STORM!</p>
+                <p class="text-[9px] text-gray-400 pixel-font text-center mt-2 leading-relaxed">CONTROLS:<br>ARROWS TO STEER<br>SPACEBAR TO JUMP!<br><br>HOST/PRACTICE: A-Z FOR TIME TRAVEL!</p>
             </div>
 
             <div id="loading-msg" class="text-yellow-400 mb-4 pixel-font text-xs animate-pulse">INITIALIZING P2P ENGINE...</div>
@@ -284,7 +284,11 @@
                 <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1">SCORE</div>
                 <div class="text-sm md:text-xl text-yellow-400 pixel-font mb-2 md:mb-4" id="score-display">1000</div>
                 <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1">SPEED</div>
-                <div class="text-sm md:text-xl text-white pixel-font" id="speed-display">0</div>
+                <div class="text-sm md:text-xl text-white pixel-font mb-2 md:mb-4" id="speed-display">0</div>
+                
+                <div class="text-[8px] md:text-[10px] text-gray-400 pixel-font mb-1">TIME PERIOD</div>
+                <div class="text-[10px] md:text-sm text-blue-400 pixel-font mb-2 md:mb-4" id="era-display">MODERN ERA</div>
+
                 <div id="status-msg" class="text-[8px] md:text-[10px] text-green-400 mt-2 opacity-0 pixel-font font-bold">BOOST ACTIVE!</div>
                 
                 <!-- NEW PHYSICS LAB BUTTON -->
@@ -344,8 +348,8 @@
             currentGateIndex: 0
         };
 
-        const weather = {
-            intensity: 0 // 0 = Sunny (A), 1 = Typhoon (Z)
+        const gameEra = {
+            intensity: 0 // 0 = Modern (A), 1 = Dinosaur (Z)
         };
 
         let raceStartTime = 0;
@@ -386,10 +390,18 @@
         const gateMeshes = [];
         const colliders = []; 
         
-        // Environment handles for weather
-        let ambientLight, dirLight, rainSystem;
-        const colorSunny = new THREE.Color(0x6CB4EE);
-        const colorStorm = new THREE.Color(0x444455);
+        // Environment handles for era
+        let ambientLight, dirLight, particleSystem;
+        const environmentObjects = { trees: [], rocks: [], modern: [], medieval: [], dinos: [] };
+        const materials = { ground: null, track: null, treeWood: null, treeLeaf: null, rock: null };
+        
+        // Multi-stop Era Gradients
+        const eras = [
+            { t: 0.0, name: "MODERN ERA", sky: 0x6CB4EE, ground: 0x3b7a3b, track: 0xffffff, leaf: 0x1E5128, light: 0xffffff, ashOpacity: 0.0, color: '#60A5FA' },
+            { t: 0.33, name: "INDUSTRIAL", sky: 0x7a7a6a, ground: 0x4a5040, track: 0x555555, leaf: 0x554433, light: 0xffddcc, ashOpacity: 0.3, color: '#9CA3AF' },
+            { t: 0.66, name: "MEDIEVAL", sky: 0x3366cc, ground: 0x55aa55, track: 0xddccaa, leaf: 0x228822, light: 0xffeedd, ashOpacity: 0.0, color: '#34D399' },
+            { t: 1.0, name: "JURASSIC", sky: 0x8B3A3A, ground: 0x3B2516, track: 0xff5522, leaf: 0x8B2222, light: 0xff6622, ashOpacity: 0.8, color: '#F87171' }
+        ];
         
         // AI Bot Data (For Solo Practice Mode)
         const botData = [
@@ -459,8 +471,8 @@
                     let val = parseFloat(e.target.value);
                     if (physicsKey === 'baseFriction') {
                         physics.baseFriction = val;
-                        // Calculate actual friction dynamically with weather
-                        physics.friction = Math.max(0.0001, physics.baseFriction - (0.004 * weather.intensity));
+                        // Calculate actual friction dynamically with era
+                        physics.friction = Math.max(0.0001, physics.baseFriction + (0.005 * gameEra.intensity));
                     } else {
                         physics[physicsKey] = val;
                     }
@@ -660,8 +672,8 @@
                         if (msg.type === 'lobby_update' || msg.type === 'state_sync') {
                             state.players = msg.players;
                             
-                            if (msg.weather !== undefined && msg.weather !== weather.intensity) {
-                                setStormIntensity(msg.weather);
+                            if (msg.era !== undefined && msg.era !== gameEra.intensity) {
+                                setEraIntensity(msg.era);
                             }
                             
                             if (state.gameState === 'menu') {
@@ -774,7 +786,7 @@
         };
 
         // ==========================================
-        // 4. START SEQUENCE & CELEBRATIONS
+        // 4. START SEQUENCE & CELE celebrations
         // ==========================================
         const initStartSequence = () => {
             state.gameState = 'countdown';
@@ -900,20 +912,64 @@
         };
 
         // ==========================================
-        // STORM SUMMONER MECHANIC
+        // TIME TRAVEL ERA MECHANIC
         // ==========================================
-        const setStormIntensity = (intensity) => {
-            weather.intensity = Math.max(0, Math.min(1, intensity));
+        const getLerpedEraValue = (prop, intensity) => {
+            for (let i = 0; i < eras.length - 1; i++) {
+                if (intensity >= eras[i].t && intensity <= eras[i+1].t) {
+                    const localT = (intensity - eras[i].t) / (eras[i+1].t - eras[i].t);
+                    if (prop === 'ashOpacity') {
+                        return eras[i][prop] + (eras[i+1][prop] - eras[i][prop]) * localT;
+                    }
+                    const c1 = new THREE.Color(eras[i][prop]);
+                    const c2 = new THREE.Color(eras[i+1][prop]);
+                    return c1.lerp(c2, localT);
+                }
+            }
+            return prop === 'ashOpacity' ? eras[eras.length-1][prop] : new THREE.Color(eras[eras.length-1][prop]);
+        };
+
+        const setEraIntensity = (intensity) => {
+            gameEra.intensity = Math.max(0, Math.min(1, intensity));
             if (!scene) return;
 
-            // Environmental changes
-            scene.background.lerpColors(colorSunny, colorStorm, weather.intensity);
-            scene.fog.color.lerpColors(colorSunny, colorStorm, weather.intensity);
-            if(ambientLight) ambientLight.intensity = 0.6 - (0.3 * weather.intensity);
-            if(dirLight) dirLight.intensity = 0.7 - (0.4 * weather.intensity);
+            // 1. Environmental Colors & Lighting
+            const skyColor = getLerpedEraValue('sky', gameEra.intensity);
+            scene.background = skyColor;
+            scene.fog.color = skyColor;
+            
+            if(ambientLight) ambientLight.intensity = 0.6 + (0.2 * gameEra.intensity);
+            if(dirLight) dirLight.color = getLerpedEraValue('light', gameEra.intensity);
 
-            // Dynamically recalculate friction incorporating the user's base friction
-            physics.friction = Math.max(0.0001, physics.baseFriction - (0.004 * weather.intensity));
+            if(materials.ground) materials.ground.color = getLerpedEraValue('ground', gameEra.intensity);
+            if(materials.track) materials.track.color = getLerpedEraValue('track', gameEra.intensity);
+            if(materials.treeLeaf) materials.treeLeaf.color = getLerpedEraValue('leaf', gameEra.intensity);
+
+            // 2. Adjust Object Scales based on timeline
+            const modernScale = Math.max(0, 1 - (gameEra.intensity / 0.33));
+            const medScale = Math.max(0, 1 - Math.abs(gameEra.intensity - 0.66) / 0.33);
+            const dinoScale = Math.max(0, (gameEra.intensity - 0.66) / 0.34);
+            
+            environmentObjects.modern.forEach(o => { o.scale.setScalar(modernScale); o.visible = modernScale > 0.01; });
+            environmentObjects.medieval.forEach(o => { o.scale.setScalar(medScale); o.visible = medScale > 0.01; });
+            environmentObjects.dinos.forEach(o => { o.scale.setScalar(dinoScale); o.visible = dinoScale > 0.01; });
+            
+            // Trees turn into giant prehistoric ferns in the past
+            environmentObjects.trees.forEach(t => t.scale.setScalar(1 + gameEra.intensity * 2.5));
+
+            // 3. Update UI Text
+            let eraObj = eras[0];
+            for (let i = eras.length - 1; i >= 0; i--) {
+                if (gameEra.intensity >= eras[i].t - 0.1) { eraObj = eras[i]; break; }
+            }
+            const eraEl = document.getElementById('era-display');
+            if (eraEl) {
+                eraEl.innerText = eraObj.name;
+                eraEl.style.color = eraObj.color;
+            }
+
+            // 4. Adjust physics subtly for rougher prehistoric terrain
+            physics.friction = Math.max(0.0001, physics.baseFriction + (0.005 * gameEra.intensity));
         };
 
         // ==========================================
@@ -923,8 +979,8 @@
             const container = document.getElementById('game-canvas');
             
             scene = new THREE.Scene();
-            scene.background = colorSunny.clone(); 
-            scene.fog = new THREE.Fog(colorSunny.getHex(), 40, 400);
+            scene.background = new THREE.Color(eras[0].sky); 
+            scene.fog = new THREE.Fog(eras[0].sky, 40, 400);
 
             camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 2000);
             
@@ -953,19 +1009,19 @@
 
             createRetroEnvironment();
             
-            // Storm Particles
-            const rainGeo = new THREE.BufferGeometry();
-            const rainCount = 2500;
-            const rainPos = new Float32Array(rainCount * 3);
-            for(let i=0; i<rainCount; i++) {
-                rainPos[i*3] = (Math.random() - 0.5) * 300;
-                rainPos[i*3+1] = Math.random() * 150;
-                rainPos[i*3+2] = (Math.random() - 0.5) * 300;
+            // Dynamic Environmental Particles (Smog/Ash)
+            const partGeo = new THREE.BufferGeometry();
+            const partCount = 2000;
+            const partPos = new Float32Array(partCount * 3);
+            for(let i=0; i<partCount; i++) {
+                partPos[i*3] = (Math.random() - 0.5) * 300;
+                partPos[i*3+1] = Math.random() * 150;
+                partPos[i*3+2] = (Math.random() - 0.5) * 300;
             }
-            rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
-            const rainMat = new THREE.PointsMaterial({ color: 0xcccccc, size: 0.8, transparent: true, opacity: 0 });
-            rainSystem = new THREE.Points(rainGeo, rainMat);
-            scene.add(rainSystem);
+            partGeo.setAttribute('position', new THREE.BufferAttribute(partPos, 3));
+            const partMat = new THREE.PointsMaterial({ color: 0xffaa55, size: 1.5, transparent: true, opacity: 0 });
+            particleSystem = new THREE.Points(partGeo, partMat);
+            scene.add(particleSystem);
 
             if (state.role === 'player') {
                 localVehicleMesh = createMonsterTruck(state.carColor, state.userName, true);
@@ -974,6 +1030,9 @@
             
             window.addEventListener('resize', onWindowResize, false);
             setupInputs();
+
+            // Force initial era settings to hide non-era objects initially
+            setEraIntensity(gameEra.intensity);
         };
 
         const createRetroEnvironment = () => {
@@ -981,8 +1040,8 @@
             const srnd = () => { let x = Math.sin(seed++) * 10000; return x - Math.floor(x); };
 
             const groundGeo = new THREE.PlaneGeometry(2500, 2500);
-            const groundMat = new THREE.MeshLambertMaterial({ color: 0x3b7a3b }); 
-            const ground = new THREE.Mesh(groundGeo, groundMat);
+            materials.ground = new THREE.MeshLambertMaterial({ color: eras[0].ground }); 
+            const ground = new THREE.Mesh(groundGeo, materials.ground);
             ground.rotation.x = -Math.PI / 2;
             ground.position.y = -0.51; 
             ground.receiveShadow = true;
@@ -1011,32 +1070,112 @@
             roadTex.repeat.set(250, 1); 
 
             const tubeGeo = new THREE.TubeGeometry(trackCurve, 200, 50, 4, true);
-            const trackMat = new THREE.MeshLambertMaterial({ map: roadTex, side: THREE.DoubleSide });
-            const track = new THREE.Mesh(tubeGeo, trackMat);
+            materials.track = new THREE.MeshLambertMaterial({ map: roadTex, side: THREE.DoubleSide });
+            const track = new THREE.Mesh(tubeGeo, materials.track);
             
             track.scale.set(1, 0.01, 1); 
             track.position.y = -0.5; 
             track.receiveShadow = true;
             scene.add(track);
 
-            const treeMatWood = new THREE.MeshLambertMaterial({color: 0x5C4033});
-            const treeMatLeaf = new THREE.MeshLambertMaterial({color: 0x1E5128});
-            const rockMat = new THREE.MeshLambertMaterial({color: 0x777777});
+            materials.treeWood = new THREE.MeshLambertMaterial({color: 0x5C4033});
+            materials.treeLeaf = new THREE.MeshLambertMaterial({color: eras[0].leaf});
+            materials.rock = new THREE.MeshLambertMaterial({color: 0x555555});
 
             const createLowPolyTree = () => {
                 const group = new THREE.Group();
-                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.5, 6, 6), treeMatWood);
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.5, 6, 6), materials.treeWood);
                 trunk.position.y = 3; trunk.castShadow = true;
-                const leaves1 = new THREE.Mesh(new THREE.ConeGeometry(7, 10, 6), treeMatLeaf); 
+                const leaves1 = new THREE.Mesh(new THREE.ConeGeometry(7, 10, 6), materials.treeLeaf); 
                 leaves1.position.y = 8; leaves1.castShadow = true;
-                const leaves2 = new THREE.Mesh(new THREE.ConeGeometry(5, 8, 6), treeMatLeaf); 
+                const leaves2 = new THREE.Mesh(new THREE.ConeGeometry(5, 8, 6), materials.treeLeaf); 
                 leaves2.position.y = 13; leaves2.castShadow = true;
                 group.add(trunk, leaves1, leaves2);
                 return group;
             };
 
-            for(let i=0; i<120; i++) { 
-                const t = i/120;
+            const createModernBuilding = () => {
+                const group = new THREE.Group();
+                const h = 30 + Math.random() * 50;
+                const w = 12 + Math.random() * 8;
+                const d = 12 + Math.random() * 8;
+                
+                // Canvas texture for lit/unlit windows
+                const bCanvas = document.createElement('canvas'); bCanvas.width = 64; bCanvas.height = 64;
+                const bCtx = bCanvas.getContext('2d');
+                bCtx.fillStyle = ['#1e293b', '#334155', '#0f172a'][Math.floor(Math.random()*3)]; 
+                bCtx.fillRect(0,0,64,64);
+                
+                bCtx.fillStyle = '#fde047'; // warm window light
+                for(let vx=8; vx<64; vx+=16) {
+                    for(let vy=8; vy<64; vy+=16) {
+                        if (Math.random() > 0.4) bCtx.fillRect(vx, vy, 8, 10);
+                    }
+                }
+                const bTex = new THREE.CanvasTexture(bCanvas);
+                bTex.wrapS = bTex.wrapT = THREE.RepeatWrapping;
+                bTex.magFilter = THREE.NearestFilter; // keep it pixelated
+                bTex.repeat.set(Math.round(w/6), Math.round(h/6));
+                
+                const mat = new THREE.MeshLambertMaterial({ map: bTex });
+                const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+                mesh.position.y = h/2;
+                mesh.castShadow = true;
+                group.add(mesh);
+                
+                // Roof tier
+                if (Math.random() > 0.4) {
+                    const roofH = 5 + Math.random()*5;
+                    const roof = new THREE.Mesh(new THREE.BoxGeometry(w*0.7, roofH, d*0.7), mat);
+                    roof.position.y = h + roofH/2;
+                    roof.castShadow = true;
+                    group.add(roof);
+                    
+                    // Antenna
+                    if (Math.random() > 0.5) {
+                        const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 12), new THREE.MeshLambertMaterial({color: 0x94a3b8}));
+                        antenna.position.y = h + roofH + 6;
+                        group.add(antenna);
+                    }
+                }
+                
+                return group;
+            };
+
+            const createCastle = () => {
+                const group = new THREE.Group();
+                const mat = new THREE.MeshLambertMaterial({color: 0xaaaaaa});
+                const base = new THREE.Mesh(new THREE.BoxGeometry(20, 15, 20), mat); base.position.y = 7.5; base.castShadow = true;
+                const towerGeo = new THREE.CylinderGeometry(4, 4, 25, 8);
+                const pos = [[-10,-10], [10,-10], [-10,10], [10,10]];
+                pos.forEach(p => {
+                    const t = new THREE.Mesh(towerGeo, mat); t.position.set(p[0], 12.5, p[1]); t.castShadow = true;
+                    group.add(t);
+                });
+                group.add(base);
+                return group;
+            };
+
+            const createDinosaur = () => {
+                const group = new THREE.Group();
+                const mat = new THREE.MeshLambertMaterial({color: 0x4a5d23}); // Olive green
+                const body = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 8), mat); body.position.y = 6; body.castShadow = true;
+                const head = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 5), mat); head.position.set(0, 9, 5); head.castShadow = true;
+                const tail = new THREE.Mesh(new THREE.ConeGeometry(2, 8, 4), mat); tail.rotation.x = Math.PI/2; tail.position.set(0, 6, -6); tail.castShadow = true;
+                const leg1 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 5, 1.5), mat); leg1.position.set(-2, 2.5, 0); leg1.castShadow = true;
+                const leg2 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 5, 1.5), mat); leg2.position.set(2, 2.5, 0); leg2.castShadow = true;
+                
+                group.add(body, head, tail, leg1, leg2);
+                group.userData = { 
+                    spawnX: 0, spawnZ: 0, targetX: 0, targetZ: 0, 
+                    speed: 0.1 + Math.random()*0.1, legTime: Math.random()*Math.PI*2, 
+                    leg1: leg1, leg2: leg2 
+                };
+                return group;
+            };
+
+            for(let i=0; i<160; i++) { 
+                const t = i/160;
                 const pt = trackCurve.getPointAt(t);
                 const tangent = trackCurve.getTangentAt(t);
                 
@@ -1046,24 +1185,45 @@
                     const tx = pt.x + (tangent.z * offset);
                     const tz = pt.z - (tangent.x * offset);
                     
-                    let isTree = srnd() > 0.4;
                     let obj, radius, height;
-                    if (isTree) {
+                    const r = srnd();
+
+                    if (r < 0.25) {
                         obj = createLowPolyTree();
                         radius = 4; height = 15;
-                    } else {
+                        environmentObjects.trees.push(obj);
+                    } else if (r < 0.40) {
                         const size = 3 + srnd() * 4;
-                        obj = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 0), rockMat);
+                        obj = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 0), materials.rock);
                         obj.rotation.y = srnd() * Math.PI;
                         obj.position.y = size - 1; 
                         obj.castShadow = true;
                         radius = size * 0.8; height = size * 2;
+                        environmentObjects.rocks.push(obj);
+                    } else if (r < 0.60) {
+                        obj = createModernBuilding();
+                        radius = 12; height = 30;
+                        environmentObjects.modern.push(obj);
+                    } else if (r < 0.80) {
+                        obj = createCastle();
+                        radius = 15; height = 25;
+                        environmentObjects.medieval.push(obj);
+                    } else {
+                        obj = createDinosaur();
+                        radius = 6; height = 12;
+                        obj.userData.spawnX = tx; obj.userData.spawnZ = tz;
+                        obj.userData.targetX = tx; obj.userData.targetZ = tz;
+                        environmentObjects.dinos.push(obj);
                     }
                     
                     obj.position.x = tx; obj.position.z = tz;
-                    if(isTree) obj.position.y = 0;
+                    if(r < 0.25 || r > 0.40) obj.position.y = 0; // Grounded objects except rocks
                     scene.add(obj);
-                    colliders.push({ x: tx, z: tz, radius: radius, h: height });
+                    
+                    // Don't add collision for Dinos so they can roam freely without glitching trucks
+                    if (r <= 0.80) {
+                        colliders.push({ x: tx, z: tz, radius: radius, h: height });
+                    }
                 });
             }
 
@@ -1178,11 +1338,11 @@
                     if(e.key === ' ' || e.code === 'Space') inputs.jump = true;
                 }
 
-                // Hosts and solo players control the weather using A-Z
+                // Hosts and solo players control the era using A-Z
                 if (state.role === 'host' || state.gameMode === 'single') {
                     if(e.keyCode >= 65 && e.keyCode <= 90) {
                         const intensity = (e.keyCode - 65) / 25; // 0 for A, 1 for Z
-                        setStormIntensity(intensity);
+                        setEraIntensity(intensity);
                     }
                 }
             });
@@ -1232,12 +1392,12 @@
                 }
             } 
             
-            // HOST LOGIC: Broadcast state & reliable weather sync to everyone continuously
+            // HOST LOGIC: Broadcast state & reliable era sync to everyone continuously
             if (state.role === 'host' && now - lastSyncTime > SYNC_RATE) {
                 broadcastToPlayers({ 
                     type: 'state_sync', 
                     players: state.players, 
-                    weather: weather.intensity 
+                    era: gameEra.intensity 
                 });
                 lastSyncTime = now;
             }
@@ -1264,22 +1424,61 @@
                 if(gm.active) gm.wall.material.opacity = 0.3 + Math.sin(now * 0.005) * 0.2;
             });
 
-            // Animate Storm Particles
-            if(weather.intensity > 0 && rainSystem) {
-                rainSystem.material.opacity = weather.intensity * 0.8;
-                const positions = rainSystem.geometry.attributes.position.array;
+            // Animate Volcanic Ash/Smog Particles based on Era
+            const ashOp = getLerpedEraValue('ashOpacity', gameEra.intensity);
+            if(ashOp > 0 && particleSystem) {
+                particleSystem.material.opacity = ashOp;
+                
+                // Color tweaks: Brownish/grey for industrial smog, Bright orange for Jurassic ash
+                if (gameEra.intensity > 0.6) particleSystem.material.color.setHex(0xffaa55);
+                else particleSystem.material.color.setHex(0xaaaa99);
+
+                const positions = particleSystem.geometry.attributes.position.array;
                 for(let i=1; i<positions.length; i+=3) {
-                    positions[i] -= (2 + weather.intensity * 3); // fall speed
+                    positions[i] -= (1 + ashOp * 2.0); // fall speed
+                    positions[i-1] += (Math.random() - 0.5) * 0.5; // drift x
+                    positions[i+1] += (Math.random() - 0.5) * 0.5; // drift z
                     if(positions[i] < 0) {
                         positions[i] = 100 + Math.random() * 50; // Reset to sky
                         positions[i-1] = camera.position.x + (Math.random() - 0.5) * 300; // x tracking
                         positions[i+1] = camera.position.z + (Math.random() - 0.5) * 300; // z tracking
                     }
                 }
-                rainSystem.geometry.attributes.position.needsUpdate = true;
-            } else if (rainSystem) {
-                rainSystem.material.opacity = 0;
+                particleSystem.geometry.attributes.position.needsUpdate = true;
+            } else if (particleSystem) {
+                particleSystem.material.opacity = 0;
             }
+
+            // Animate Roaming Dinosaurs
+            environmentObjects.dinos.forEach(dino => {
+                if(dino.scale.x < 0.1) return; // Save CPU if invisible
+                
+                const ud = dino.userData;
+                const dx = ud.targetX - dino.position.x;
+                const dz = ud.targetZ - dino.position.z;
+                const dist = Math.hypot(dx, dz);
+                
+                if(dist < 5) {
+                    // Pick a new wander target within 100 units of spawn
+                    ud.targetX = ud.spawnX + (Math.random() - 0.5) * 100;
+                    ud.targetZ = ud.spawnZ + (Math.random() - 0.5) * 100;
+                } else {
+                    const targetAngle = Math.atan2(dx, dz);
+                    // Smooth rotation towards target
+                    let diff = targetAngle - dino.rotation.y;
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    while (diff > Math.PI) diff -= Math.PI * 2;
+                    dino.rotation.y += diff * 0.05;
+                    
+                    dino.position.x += Math.sin(dino.rotation.y) * ud.speed;
+                    dino.position.z += Math.cos(dino.rotation.y) * ud.speed;
+                }
+                
+                // Animate leg walking motion
+                ud.legTime += 0.1;
+                ud.leg1.rotation.x = Math.sin(ud.legTime) * 0.6;
+                ud.leg2.rotation.x = -Math.sin(ud.legTime) * 0.6;
+            });
 
             updateLeaderboardHUD();
 
